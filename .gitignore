@@ -1,0 +1,25 @@
+# Build results
+[Bb]in/
+[Oo]bj/
+
+# User-specific files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Visual Studio Code
+.vscode/
+
+# System Files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# SQLite
+*.db
+*.db-shm
+*.db-wal
+
+# Logging
+Logs/
