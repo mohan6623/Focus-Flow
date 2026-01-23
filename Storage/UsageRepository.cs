@@ -298,6 +298,48 @@ public class UsageRepository : IDisposable
     }
 
     /// <summary>
+    /// Gets total screen time for a specific date range.
+    /// Returns a dictionary mapping Date -> TotalTime.
+    /// </summary>
+    public Dictionary<DateOnly, TimeSpan> GetUsageHistory(DateOnly startDate, DateOnly endDate)
+    {
+        EnsureInitialized();
+        var results = new Dictionary<DateOnly, TimeSpan>();
+
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                SELECT date, SUM(total_seconds)
+                FROM app_usage
+                WHERE date BETWEEN @startDate AND @endDate
+                GROUP BY date
+                ORDER BY date ASC
+            ";
+            command.Parameters.AddWithValue("@startDate", startDate.ToString("yyyy-MM-dd"));
+            command.Parameters.AddWithValue("@endDate", endDate.ToString("yyyy-MM-dd"));
+
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                if (DateOnly.TryParse(reader.GetString(0), out var date))
+                {
+                    results[date] = TimeSpan.FromSeconds(reader.GetInt64(1));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to get usage history: {ex.Message}");
+        }
+
+        return results;
+    }
+
+    /// <summary>
     /// Gets the user-defined category for an app.
     /// </summary>
     public string? GetAppCategory(string appName)

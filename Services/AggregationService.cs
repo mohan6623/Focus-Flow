@@ -44,8 +44,32 @@ public class AggregationService : IDisposable
     public void Start()
     {
         _repository.Initialize();
+        LoadTodayStats(); // Load data before starting timer
         _persistTimer.Change(PersistInterval, PersistInterval);
         Logger.Info($"Aggregation service started (persist interval: {PersistInterval.TotalMinutes}m)");
+    }
+
+    private void LoadTodayStats()
+    {
+        try
+        {
+            var stats = _repository.GetDailyStats(_currentDate);
+            lock (_statsLock)
+            {
+                foreach (var s in stats)
+                {
+                    _todayStats[s.AppName] = s;
+                }
+            }
+            if (stats.Count > 0)
+            {
+                Logger.Info($"Loaded {stats.Count} app stats for {_currentDate}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to load today's stats: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -142,6 +166,28 @@ public class AggregationService : IDisposable
                 .Take(count)
                 .ToList();
         }
+    }
+
+    /// <summary>
+    /// Gets usage history for the last N days.
+    /// Used for the Daily Report graph.
+    /// </summary>
+    public Dictionary<DateOnly, TimeSpan> GetDailyHistory(int days = 7)
+    {
+        var endDate = DateOnly.FromDateTime(DateTime.Now);
+        var startDate = endDate.AddDays(-days + 1);
+        
+        // Fetch from repo
+        var history = _repository.GetUsageHistory(startDate, endDate);
+        
+        // Ensure today's in-memory stats are included/overridden if repo is lagging
+        // (Repo is updated periodically, so in-memory is fresher for today)
+        lock (_statsLock)
+        {
+            history[endDate] = GetTotalScreenTimeToday();
+        }
+
+        return history;
     }
 
     /// <summary>

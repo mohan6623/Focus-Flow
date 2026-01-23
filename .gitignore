@@ -21,5 +21,6 @@ Desktop.ini
 *.db-shm
 *.db-wal
 
+GIT_GUIDE.md
 # Logging
 Logs/
