@@ -17,6 +17,7 @@ public partial class DashboardWindow : Window
 {
     private readonly AggregationService _aggregationService;
     private readonly SystemTimeService _systemTimeService;
+    private readonly TrayIconManager _trayIconManager;
     private readonly DispatcherTimer _refreshTimer;
     private readonly CategoryService _categoryService; // Ensure this is available, or use aggregation service if integrated
 
@@ -29,15 +30,27 @@ public partial class DashboardWindow : Window
         (SolidColorBrush)new BrushConverter().ConvertFrom("#404040")!, // Dark Grey (Top 4)
     };
 
-    public DashboardWindow(AggregationService aggregationService, SystemTimeService systemTimeService)
+    // Track if showing hourly detail view
+    private bool _isShowingHourlyDetail = false;
+    private DateOnly? _hourlyDetailDate = null;
+
+    public DashboardWindow(AggregationService aggregationService, SystemTimeService systemTimeService, TrayIconManager trayIconManager)
     {
         InitializeComponent();
         
         _aggregationService = aggregationService;
         _systemTimeService = systemTimeService;
+        _trayIconManager = trayIconManager;
 
-        // Custom Window Dragging
-        this.MouseLeftButtonDown += (s, e) => this.DragMove();
+        // Custom Window Dragging - only drag from non-interactive areas
+        this.MouseLeftButtonDown += (s, e) => 
+        {
+            // Don't drag if clicking on the graph container
+            if (!IsClickOnGraphBar(e))
+            {
+                this.DragMove();
+            }
+        };
 
         _refreshTimer = new DispatcherTimer
         {
@@ -241,8 +254,15 @@ public partial class DashboardWindow : Window
 
     private void UpdateDailyReport()
     {
-        DailyGraphContainer.Children.Clear();
-        // Assuming 7 grid columns already defined in XAML
+        // Always update weekly chart
+        WeeklyGraphContainer.Children.Clear();
+        WeeklyGraphContainer.ColumnDefinitions.Clear();
+        
+        // Add 7 columns for 7 days
+        for (int i = 0; i < 7; i++)
+        {
+            WeeklyGraphContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        }
 
         var history = _aggregationService.GetDailyHistory(7);
         var today = DateOnly.FromDateTime(DateTime.Now);
@@ -260,7 +280,15 @@ public partial class DashboardWindow : Window
             var isToday = date == today;
 
             // Bar Container
-            var container = new Grid { Margin = new Thickness(5, 0, 5, 0) };
+            var container = new Grid 
+            { 
+                Margin = new Thickness(5, 0, 5, 0),
+                Background = Brushes.Transparent, // Capture clicks
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Tag = date
+            };
+            container.MouseLeftButtonDown += Day_Click;
+
             container.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Space above
             container.RowDefinitions.Add(new RowDefinition { Height = new GridLength(0, GridUnitType.Auto) }); // Label
 
@@ -270,11 +298,35 @@ public partial class DashboardWindow : Window
             barGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1 - pct, GridUnitType.Star) }); // Empty top
             barGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(pct, GridUnitType.Star) }); // Filled bottom
 
+            // Create gradient brush for active bars - more vibrant look
+            Brush barBrush;
+            if (isToday)
+            {
+                barBrush = new LinearGradientBrush(
+                    Color.FromRgb(0, 240, 160), // Bright teal
+                    Color.FromRgb(0, 200, 130), // Slightly darker
+                    90);
+            }
+            else
+            {
+                barBrush = new LinearGradientBrush(
+                    Color.FromRgb(80, 80, 80),
+                    Color.FromRgb(50, 50, 50),
+                    90);
+            }
+
             var bar = new Border
             {
-                Background = isToday ? (System.Windows.Media.Brush)FindResource("AccentBrush") : new SolidColorBrush(Color.FromRgb(60, 60, 60)),
-                CornerRadius = new CornerRadius(6, 6, 6, 6),
-                VerticalAlignment = VerticalAlignment.Stretch
+                Background = barBrush,
+                CornerRadius = new CornerRadius(8),
+                VerticalAlignment = VerticalAlignment.Stretch,
+                Effect = isToday ? new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color = Color.FromRgb(0, 224, 150),
+                    BlurRadius = 12,
+                    ShadowDepth = 0,
+                    Opacity = 0.5
+                } : null
             };
             
             Grid.SetRow(bar, 1);
@@ -288,30 +340,22 @@ public partial class DashboardWindow : Window
             var dayLabel = new TextBlock
             {
                 Text = date.ToString("ddd"), // Mon, Tue...
-                Foreground = isToday ? Brushes.White : (Brush)FindResource("TextSecondaryBrush"),
+                Foreground = isToday ? new SolidColorBrush(Color.FromRgb(0, 240, 160)) : new SolidColorBrush(Color.FromRgb(140, 140, 140)),
                 HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 5, 0, 0),
-                FontSize = 11
+                Margin = new Thickness(0, 8, 0, 0),
+                FontSize = 12,
+                FontWeight = isToday ? FontWeights.Bold : FontWeights.Normal
             };
             
             Grid.SetRow(dayLabel, 1);
             container.Children.Add(dayLabel);
 
-            // Add to main container
+            // Add to weekly container
             Grid.SetColumn(container, colIndex);
-            DailyGraphContainer.Children.Add(container);
+            WeeklyGraphContainer.Children.Add(container);
             
             colIndex++;
         }
-
-        // Update Stats Breakdown (Fake categories for MVP, real for "Active")
-        // In real impl, we'd query by category. For now, let's just show total Active.
-        // Or fetch category stats if possible.
-        // We haven't implemented "GetStatsByCategory" in AggregationService yet.
-        // Let's hide the numbers or show simplified total.
-        // For MVP, set them to "..." or total/2.
-        TxtProductivityTime.Text = FormatTime(TimeSpan.FromSeconds(history.TryGetValue(today, out var t) ? t.TotalSeconds * 0.6 : 0)); // Fake 60%
-        TxtEntertainmentTime.Text = FormatTime(TimeSpan.FromSeconds(history.TryGetValue(today, out var t2) ? t2.TotalSeconds * 0.3 : 0)); // Fake 30%
     }
 
     private string FormatTime(TimeSpan t)
@@ -330,5 +374,198 @@ public partial class DashboardWindow : Window
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {
         this.Hide();
+    }
+
+    private bool IsClickOnGraphBar(System.Windows.Input.MouseButtonEventArgs e)
+    {
+        // Check if the click originated from within the WeeklyGraphContainer
+        var source = e.OriginalSource as DependencyObject;
+        while (source != null)
+        {
+            if (source == WeeklyGraphContainer)
+                return true;
+            source = VisualTreeHelper.GetParent(source);
+        }
+        return false;
+    }
+
+    private void Day_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (sender is Grid grid && grid.Tag is DateOnly date)
+        {
+            e.Handled = true; // Prevent event from bubbling up to trigger DragMove
+            ShowHourlyDetail(date);
+        }
+    }
+
+    private void BackToWeekly_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        _isShowingHourlyDetail = false;
+        _hourlyDetailDate = null;
+        
+        // Hide hourly view
+        HourlyGraphContainer.Visibility = Visibility.Collapsed;
+        
+        // Update header
+        TxtReportSubtitle.Text = "Last 7 Days";
+        ((TextBlock)((Border)ViewModeBadge).Child).Text = "Weekly View";
+    }
+
+    private void ShowHourlyDetail(DateOnly date)
+    {
+        // Mark that we're showing hourly detail
+        _isShowingHourlyDetail = true;
+        _hourlyDetailDate = date;
+        
+        // Update header
+        TxtReportSubtitle.Text = $"{date:ddd, MMM d} - Hourly Breakdown";
+        ((TextBlock)((Border)ViewModeBadge).Child).Text = "Hourly View";
+
+        var sessions = _aggregationService.GetSessionsForDate(date);
+        
+        // Create hourly buckets (0-23)
+        var hourlyMinutes = new double[24];
+        foreach (var session in sessions)
+        {
+            int hour = session.StartTime.Hour;
+            hourlyMinutes[hour] += session.Duration.TotalMinutes;
+        }
+        
+        double maxMinutes = hourlyMinutes.Max();
+        if (maxMinutes <= 0) maxMinutes = 1;
+
+        // Show and populate hourly container
+        HourlyGraphContainer.Visibility = Visibility.Visible;
+        HourlyGraphContainer.Children.Clear();
+        HourlyGraphContainer.ColumnDefinitions.Clear();
+
+        // Add 24 columns for hours
+        for (int h = 0; h < 24; h++)
+        {
+            HourlyGraphContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        }
+
+        for (int h = 0; h < 24; h++)
+        {
+            double pct = hourlyMinutes[h] / maxMinutes;
+
+            // Bar Container
+            var container = new Grid 
+            { 
+                Margin = new Thickness(1, 0, 1, 0),
+                Background = Brushes.Transparent,
+                Cursor = System.Windows.Input.Cursors.Hand,
+                ToolTip = $"{h}:00 - {hourlyMinutes[h]:F0} min"
+            };
+            container.MouseLeftButtonDown += BackToWeekly_Click;
+
+            container.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Space above
+            container.RowDefinitions.Add(new RowDefinition { Height = new GridLength(18, GridUnitType.Pixel) }); // Label row with fixed height
+
+            // Use a Grid for the bar to handle proportional height
+            var barGrid = new Grid();
+            barGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1 - pct, GridUnitType.Star) }); // Empty top
+            barGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(pct, GridUnitType.Star) }); // Filled bottom
+
+            // Create gradient brush for active bars
+            Brush barBrush = hourlyMinutes[h] > 0 
+                ? new LinearGradientBrush(
+                    Color.FromRgb(0, 224, 150), // Bright teal
+                    Color.FromRgb(0, 180, 120), // Darker teal
+                    90)
+                : new SolidColorBrush(Color.FromRgb(40, 40, 40));
+
+            var bar = new Border
+            {
+                Background = barBrush,
+                CornerRadius = new CornerRadius(2),
+                VerticalAlignment = VerticalAlignment.Stretch,
+                Effect = hourlyMinutes[h] > 0 ? new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color = Color.FromRgb(0, 224, 150),
+                    BlurRadius = 8,
+                    ShadowDepth = 0,
+                    Opacity = 0.4
+                } : null
+            };
+            
+            Grid.SetRow(bar, 1);
+            barGrid.Children.Add(bar);
+            
+            Grid.SetRow(barGrid, 0);
+            container.Children.Add(barGrid);
+
+            // Hour label - show every 6 hours for cleaner look (0, 6, 12, 18)
+            if (h % 6 == 0)
+            {
+                var label = new TextBlock 
+                { 
+                    Text = $"{h}h", 
+                    FontSize = 10,
+                    FontWeight = FontWeights.Medium,
+                    Foreground = new SolidColorBrush(Color.FromRgb(180, 180, 180)),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                Grid.SetRow(label, 1);
+                container.Children.Add(label);
+            }
+
+            Grid.SetColumn(container, h);
+            HourlyGraphContainer.Children.Add(container);
+        }
+    }
+
+    private void FocusButton_Click(object sender, RoutedEventArgs e)
+    {
+        // First, show duration selection dialog
+        var durationDialog = new FocusDurationDialog();
+        durationDialog.Owner = this;
+        durationDialog.ShowDialog();
+
+        if (!durationDialog.Confirmed)
+            return; // User cancelled
+
+        int selectedMinutes = durationDialog.SelectedMinutes;
+
+        // Start tray focus mode
+        _trayIconManager.StartFocusMode(selectedMinutes);
+
+        // Open the Focus Timer popup with selected duration
+        var focusWindow = new FocusTimerWindow(selectedMinutes);
+        
+        // Wire up timer tick to update tray
+        focusWindow.TimerTick += (s, args) =>
+        {
+            _trayIconManager.UpdateFocusTime(args.Remaining, args.Total);
+        };
+
+        // Wire up pause state to tray
+        focusWindow.PauseStateChanged += (s, isPaused) =>
+        {
+            _trayIconManager.SetFocusPaused(isPaused);
+        };
+
+        focusWindow.SessionCompleted += (s, args) =>
+        {
+            _trayIconManager.EndFocusMode();
+            // TODO: Log completed session to FocusService
+        };
+        
+        focusWindow.SessionCancelled += (s, args) =>
+        {
+            _trayIconManager.EndFocusMode();
+            // TODO: Log cancelled session
+        };
+
+        // Handle window closed (e.g., if user closes via other means)
+        focusWindow.Closed += (s, args) =>
+        {
+            _trayIconManager.EndFocusMode();
+        };
+
+        focusWindow.Show();
+        focusWindow.StartTimer();
     }
 }

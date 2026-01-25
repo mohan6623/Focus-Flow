@@ -1,0 +1,150 @@
+<Window x:Class="ScreenTimeTracker.App.FocusTimerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Focus Timer"
+        Width="110" Height="42"
+        MinWidth="80" MinHeight="32"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ResizeMode="CanResize"
+        WindowStartupLocation="Manual">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0"/>
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <!-- Dark ContextMenu Style -->
+        <Style TargetType="{x:Type ContextMenu}">
+            <Setter Property="OverridesDefaultStyle" Value="True"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ContextMenu}">
+                        <Border Background="#1A1A1A" BorderBrush="#333" BorderThickness="1" CornerRadius="4" Padding="4">
+                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Dark MenuItem Style -->
+        <Style TargetType="{x:Type MenuItem}">
+            <Setter Property="OverridesDefaultStyle" Value="True"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type MenuItem}">
+                        <Border x:Name="Border" Background="Transparent" Padding="8,5" SnapsToDevicePixels="True">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="Icon"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <!-- Emulate Icon (Check/Image) -->
+                                <ContentPresenter x:Name="Icon" ContentSource="Icon" Margin="0,0,10,0" VerticalAlignment="Center" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                                <!-- Header -->
+                                <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="#333"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="#888"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Separator Style -->
+        <Style TargetType="{x:Type Separator}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Separator}">
+                        <Border BorderBrush="#333" BorderThickness="1" Margin="4,4,4,4"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <!-- Right-Click Context Menu -->
+    <Window.ContextMenu>
+        <ContextMenu>
+            <MenuItem Header="⏸ Pause/Resume" Click="Pause_Click"/>
+            <Separator/>
+            <MenuItem Header="📊 Time Left" Click="ShowTimeLeft_Click"/>
+            <MenuItem Header="⏱ Time Spent" Click="ShowTimeSpent_Click"/>
+            <Separator/>
+            <MenuItem Header="✕ End Session" Click="EndSession_Click"/>
+        </ContextMenu>
+    </Window.ContextMenu>
+
+    <Border x:Name="MainBorder" 
+            Background="#1A1A1A" 
+            CornerRadius="8" 
+            BorderBrush="#333" 
+            BorderThickness="1">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="6" ShadowDepth="1" Opacity="0.3" Color="Black"/>
+        </Border.Effect>
+        
+        <!-- Viewbox makes content scale with window size -->
+        <Viewbox Stretch="Uniform" Margin="5,3">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Progress Ring with Pause inside (Click to pause) -->
+                <!-- Progress Ring with Pause inside (Click to pause) -->
+                <Grid Grid.Column="0" Width="24" Height="24" Margin="5,0,0,0"
+                      Cursor="Hand" MouseLeftButtonDown="Circle_Click"
+                      ToolTip="Click to Pause/Resume">
+                    <Ellipse Stroke="#444" StrokeThickness="2" Fill="Transparent"/>
+                    <Ellipse x:Name="ProgressArcFill" 
+                             Stroke="#00E096" 
+                             StrokeThickness="2" 
+                             Fill="Transparent"
+                             StrokeDashArray="0 100"/>
+                    <!-- Pause icon: just two vertical bars (Centered: Width 8 centered in Width 10 Canvas) -->
+                    <Canvas x:Name="PauseIconCanvas" Width="10" Height="12" 
+                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Rectangle x:Name="PauseBar1" Width="3" Height="10" Fill="#AAA" Canvas.Left="1" Canvas.Top="1"/>
+                        <Rectangle x:Name="PauseBar2" Width="3" Height="10" Fill="#AAA" Canvas.Left="6" Canvas.Top="1"/>
+                    </Canvas>
+                    <!-- Play icon (hidden by default) - Margin 1 left for optical center -->
+                    <Polygon x:Name="PlayIcon" Points="0,0 0,10 8,5" Fill="#AAA" 
+                             HorizontalAlignment="Center" VerticalAlignment="Center"
+                             Visibility="Collapsed" Margin="2,0,0,0"/>
+                </Grid>
+
+                <!-- Timer Display (Left aligned to stay close to ring) -->
+                <TextBlock x:Name="TxtTimer" 
+                           Grid.Column="1"
+                           Text="25:00" 
+                           FontSize="17" 
+                           FontWeight="Bold" 
+                           Foreground="White"
+                           FontFamily="Consolas"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Left"
+                           Margin="5,0,5,0"
+                           Cursor="Hand"
+                           MouseLeftButtonDown="Timer_Click"
+                           ToolTip="Click to toggle time left/spent"/>
+            </Grid>
+        </Viewbox>
+    </Border>
+</Window>

@@ -77,6 +77,17 @@ public class AppUsageStats
     }
 
     /// <summary>
+    /// Restores stats from database values (used when loading persisted data).
+    /// </summary>
+    public void SetFromDatabase(TimeSpan totalTime, int sessionCount, DateTime firstUsed, DateTime lastUsed)
+    {
+        TotalTime = totalTime;
+        SessionCount = sessionCount;
+        FirstUsed = firstUsed;
+        LastUsed = lastUsed;
+    }
+
+    /// <summary>
     /// Merges another stats object into this one (for combining loaded data with live data).
     /// </summary>
     public void Merge(AppUsageStats other)

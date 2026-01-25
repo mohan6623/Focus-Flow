@@ -13,6 +13,7 @@ public class AggregationService : IDisposable
 {
     private readonly UsageRepository _repository;
     private readonly Dictionary<string, AppUsageStats> _todayStats;
+    private readonly List<UsageSession> _pendingSessions;
     private readonly object _statsLock = new();
     private readonly global::System.Threading.Timer _persistTimer;
     
@@ -34,6 +35,7 @@ public class AggregationService : IDisposable
     {
         _repository = repository;
         _todayStats = new Dictionary<string, AppUsageStats>(StringComparer.OrdinalIgnoreCase);
+        _pendingSessions = new List<UsageSession>();
         _currentDate = DateOnly.FromDateTime(DateTime.Now);
         _persistTimer = new global::System.Threading.Timer(PersistCallback, null, Timeout.Infinite, Timeout.Infinite);
     }
@@ -106,6 +108,7 @@ public class AggregationService : IDisposable
             }
 
             stats.AddSession(session);
+            _pendingSessions.Add(session);
             _isDirty = true;
 
             Logger.Debug($"Added session to {session.AppName}: {session.Duration.TotalSeconds:F1}s");
@@ -191,6 +194,29 @@ public class AggregationService : IDisposable
     }
 
     /// <summary>
+    /// Gets all sessions for a specific date (for hourly breakdown view).
+    /// </summary>
+    public List<UsageSession> GetSessionsForDate(DateOnly date)
+    {
+        // First check if it's today and we have pending sessions in memory
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        
+        if (date == today)
+        {
+            // For today, combine DB sessions + pending (in-memory) sessions
+            var dbSessions = _repository.GetSessionsForDate(date);
+            lock (_statsLock)
+            {
+                dbSessions.AddRange(_pendingSessions.Where(s => s.Date == date));
+            }
+            return dbSessions.OrderBy(s => s.StartTime).ToList();
+        }
+        
+        // For past days, just get from DB
+        return _repository.GetSessionsForDate(date);
+    }
+
+    /// <summary>
     /// Forces immediate persistence to disk.
     /// </summary>
     public void PersistNow()
@@ -208,10 +234,22 @@ public class AggregationService : IDisposable
             _isDirty = false;
         }
 
+        // Grab pending sessions
+        List<UsageSession> sessionsToPersist;
+        lock (_statsLock)
+        {
+            sessionsToPersist = _pendingSessions.ToList();
+            _pendingSessions.Clear();
+        }
+
         try
         {
             _repository.SaveUsageBatch(statsToPersist);
-            Logger.Debug($"Persisted {statsToPersist.Count} app stats");
+            if (sessionsToPersist.Count > 0)
+            {
+                _repository.SaveSessionsBatch(sessionsToPersist);
+            }
+            Logger.Debug($"Persisted {statsToPersist.Count} app stats and {sessionsToPersist.Count} sessions");
         }
         catch (Exception ex)
         {

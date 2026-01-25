@@ -12,7 +12,11 @@ public class TrayIconManager : IDisposable
     private ContextMenuStrip? _contextMenu;
     private ToolStripMenuItem? _pauseMenuItem;
     private ToolStripMenuItem? _resumeMenuItem;
+    private ToolStripMenuItem? _focusPauseMenuItem;
+    private ToolStripMenuItem? _focusStopMenuItem;
+    private ToolStripSeparator? _focusSeparator;
     private bool _isPaused;
+    private bool _isInFocusMode;
     private bool _disposed;
 
     /// <summary>
@@ -34,6 +38,16 @@ public class TrayIconManager : IDisposable
     /// Raised when user requests to view stats.
     /// </summary>
     public event EventHandler? StatsRequested;
+
+    /// <summary>
+    /// Raised when user requests to pause focus session via tray.
+    /// </summary>
+    public event EventHandler? FocusPauseRequested;
+
+    /// <summary>
+    /// Raised when user requests to stop focus session via tray.
+    /// </summary>
+    public event EventHandler? FocusStopRequested;
 
     /// <summary>
     /// Shows the tray icon.
@@ -103,10 +117,10 @@ public class TrayIconManager : IDisposable
             ContextMenuStrip = _contextMenu
         };
 
-        _notifyIcon.DoubleClick += (s, e) =>
+        _notifyIcon.Click += (s, e) =>
         {
-            // Future: Open stats window
-            ShowBalloon("Screen Time Tracker", "Double-click to view stats (coming soon)");
+            // Open dashboard on single click
+            StatsRequested?.Invoke(this, EventArgs.Empty);
         };
     }
 
@@ -155,6 +169,28 @@ public class TrayIconManager : IDisposable
             ShowBalloon("Coming Soon", "Settings will be available in a future update");
         });
         _contextMenu.Items.Add(settingsItem);
+
+        // Focus mode separator and items (hidden by default)
+        _focusSeparator = new ToolStripSeparator { Visible = false };
+        _contextMenu.Items.Add(_focusSeparator);
+
+        _focusPauseMenuItem = new ToolStripMenuItem("⏸ Pause Focus", null, (s, e) =>
+        {
+            FocusPauseRequested?.Invoke(this, EventArgs.Empty);
+        })
+        {
+            Visible = false
+        };
+        _contextMenu.Items.Add(_focusPauseMenuItem);
+
+        _focusStopMenuItem = new ToolStripMenuItem("✕ End Focus Session", null, (s, e) =>
+        {
+            FocusStopRequested?.Invoke(this, EventArgs.Empty);
+        })
+        {
+            Visible = false
+        };
+        _contextMenu.Items.Add(_focusStopMenuItem);
 
         _contextMenu.Items.Add(new ToolStripSeparator());
 
@@ -211,6 +247,125 @@ public class TrayIconManager : IDisposable
         var hIcon = bitmap.GetHicon();
         var icon = Icon.FromHandle(hIcon);
         return icon;
+    }
+
+    /// <summary>
+    /// Enters focus mode - changes icon and shows focus menu items.
+    /// </summary>
+    public void StartFocusMode(int totalMinutes)
+    {
+        _isInFocusMode = true;
+        
+        // Show focus menu items
+        if (_focusSeparator != null) _focusSeparator.Visible = true;
+        if (_focusPauseMenuItem != null) _focusPauseMenuItem.Visible = true;
+        if (_focusStopMenuItem != null) _focusStopMenuItem.Visible = true;
+
+        // Change icon to focus icon
+        if (_notifyIcon != null)
+        {
+            _notifyIcon.Icon = CreateFocusIcon(1.0);
+        }
+
+        UpdateFocusTime(TimeSpan.FromMinutes(totalMinutes), TimeSpan.FromMinutes(totalMinutes));
+        Logger.Info("Tray entered focus mode");
+    }
+
+    /// <summary>
+    /// Updates the focus timer display in tray.
+    /// </summary>
+    public void UpdateFocusTime(TimeSpan remaining, TimeSpan total)
+    {
+        if (_notifyIcon == null) return;
+
+        var minutes = (int)remaining.TotalMinutes;
+        var seconds = remaining.Seconds;
+        
+        _notifyIcon.Text = $"🎯 Focus: {minutes:D2}:{seconds:D2}";
+        
+        // Update icon progress
+        double progress = 1 - (remaining.TotalSeconds / total.TotalSeconds);
+        _notifyIcon.Icon = CreateFocusIcon(progress);
+    }
+
+    /// <summary>
+    /// Updates focus pause state.
+    /// </summary>
+    public void SetFocusPaused(bool isPaused)
+    {
+        if (_focusPauseMenuItem != null)
+        {
+            _focusPauseMenuItem.Text = isPaused ? "▶ Resume Focus" : "⏸ Pause Focus";
+        }
+        
+        if (_notifyIcon != null && _isInFocusMode)
+        {
+            var currentText = _notifyIcon.Text ?? "";
+            if (isPaused && !currentText.Contains("(Paused)"))
+            {
+                _notifyIcon.Text = currentText + " (Paused)";
+            }
+        }
+    }
+
+    /// <summary>
+    /// Exits focus mode - restores normal icon.
+    /// </summary>
+    public void EndFocusMode()
+    {
+        _isInFocusMode = false;
+        
+        // Hide focus menu items
+        if (_focusSeparator != null) _focusSeparator.Visible = false;
+        if (_focusPauseMenuItem != null) _focusPauseMenuItem.Visible = false;
+        if (_focusStopMenuItem != null) _focusStopMenuItem.Visible = false;
+
+        // Restore default icon
+        if (_notifyIcon != null)
+        {
+            _notifyIcon.Icon = CreateDefaultIcon();
+            _notifyIcon.Text = "Screen Time Tracker";
+        }
+
+        Logger.Info("Tray exited focus mode");
+    }
+
+    private static Icon CreateFocusIcon(double progress)
+    {
+        var bitmap = new Bitmap(32, 32);
+        
+        using (var g = Graphics.FromImage(bitmap))
+        {
+            g.SmoothingMode = global::System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.Clear(Color.Transparent);
+            
+            // Background circle (dark)
+            using (var brush = new SolidBrush(Color.FromArgb(30, 30, 30)))
+            {
+                g.FillEllipse(brush, 2, 2, 28, 28);
+            }
+
+            // Progress arc (teal green)
+            if (progress > 0)
+            {
+                using (var pen = new Pen(Color.FromArgb(0, 224, 150), 3))
+                {
+                    // Draw arc based on progress
+                    int sweepAngle = (int)(360 * progress);
+                    g.DrawArc(pen, 3, 3, 26, 26, -90, sweepAngle);
+                }
+            }
+
+            // Center timer icon (small play triangle or pause bars)
+            using (var brush = new SolidBrush(Color.White))
+            {
+                // Simple dot
+                g.FillEllipse(brush, 13, 13, 6, 6);
+            }
+        }
+
+        var hIcon = bitmap.GetHicon();
+        return Icon.FromHandle(hIcon);
     }
 
     public void Dispose()

@@ -75,6 +75,16 @@
                 </StackPanel>
                 
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
+                     <!-- Focus Button (Star Feature) -->
+                     <Button x:Name="BtnFocus" 
+                             Content="🎯 Focus" 
+                             FontSize="12" 
+                             Padding="12,6"
+                             Background="{StaticResource AccentBrush}"
+                             Foreground="Black"
+                             FontWeight="Bold"
+                             Click="FocusButton_Click"
+                             Margin="0,0,15,0"/>
                      <Button Content="✕" FontSize="16" Width="30" Height="30" Click="CloseButton_Click"/>
                 </StackPanel>
             </Grid>
@@ -129,52 +139,35 @@
                 <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="0,0,20,0">
                     <Grid>
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>   <!-- Header -->
+                            <RowDefinition Height="1.2*"/>   <!-- Weekly Chart -->
+                            <RowDefinition Height="1*"/>     <!-- Hourly Chart -->
                         </Grid.RowDefinitions>
 
                         <!-- Header -->
-                        <Grid Margin="0,0,0,20">
+                        <Grid Grid.Row="0" Margin="0,0,0,20">
                             <StackPanel>
-                                <TextBlock Text="Daily Report" FontSize="16" FontWeight="SemiBold" Foreground="White"/>
-                                <TextBlock Text="Last 7 Days" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+                                <TextBlock Text="Activity Report" FontSize="16" FontWeight="SemiBold" Foreground="White"/>
+                                <TextBlock x:Name="TxtReportSubtitle" Text="Last 7 Days" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0"/>
                             </StackPanel>
-                            <Border Background="{StaticResource AccentBrush}" CornerRadius="15" HorizontalAlignment="Right" Padding="10,5">
+                            <Border x:Name="ViewModeBadge" Background="{StaticResource AccentBrush}" CornerRadius="15" HorizontalAlignment="Right" Padding="10,5">
                                 <TextBlock Text="Weekly View" FontSize="10" FontWeight="Bold" Foreground="Black"/>
                             </Border>
                         </Grid>
 
-                        <!-- Bar Chart -->
+                        <!-- Weekly Chart (always visible) -->
                         <Grid Grid.Row="1" Margin="0,10">
-                            <Grid x:Name="DailyGraphContainer">
-                                <Grid.ColumnDefinitions>
-                                    <!-- 7 Columns for 7 Days -->
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <!-- Bars will be injected here -->
+                            <Grid x:Name="WeeklyGraphContainer">
+                                <!-- 7 columns for 7 days will be added in code-behind -->
                             </Grid>
                         </Grid>
 
-                        <!-- Stats Breakdown -->
-                        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
-                            <StackPanel Orientation="Horizontal" Margin="0,0,20,0">
-                                <Ellipse Width="8" Height="8" Fill="{StaticResource AccentBrush}"/>
-                                <TextBlock Text="Productivity" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="8,0,0,0"/>
-                                <TextBlock x:Name="TxtProductivityTime" Text="0h" Foreground="White" FontSize="12" Margin="5,0,0,0" FontWeight="Bold"/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal">
-                                <Ellipse Width="8" Height="8" Fill="White"/>
-                                <TextBlock Text="Entertainment" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="8,0,0,0"/>
-                                <TextBlock x:Name="TxtEntertainmentTime" Text="0h" Foreground="White" FontSize="12" Margin="5,0,0,0" FontWeight="Bold"/>
-                            </StackPanel>
-                        </StackPanel>
+                        <!-- Hourly Chart (appears when day is clicked) -->
+                        <Grid Grid.Row="2" Margin="0,10,0,0">
+                            <Grid x:Name="HourlyGraphContainer" Visibility="Collapsed">
+                                <!-- 24 columns for 24 hours will be added in code-behind -->
+                            </Grid>
+                        </Grid>
                     </Grid>
                 </Border>
 

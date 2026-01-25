@@ -65,6 +65,20 @@ public class UsageRepository : IDisposable
                     category TEXT NOT NULL,
                     is_user_override INTEGER DEFAULT 0
                 );
+
+                CREATE TABLE IF NOT EXISTS app_sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    app_name TEXT NOT NULL,
+                    start_time TEXT NOT NULL,
+                    end_time TEXT NOT NULL,
+                    duration_seconds INTEGER NOT NULL,
+                    date TEXT NOT NULL,
+                    website_domain TEXT,
+                    created_at TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_app_sessions_date ON app_sessions(date);
+                CREATE INDEX IF NOT EXISTS idx_app_sessions_app_name ON app_sessions(app_name);
             ";
             command.ExecuteNonQuery();
 
@@ -96,8 +110,8 @@ public class UsageRepository : IDisposable
                 INSERT INTO app_usage (app_name, date, total_seconds, session_count, first_used, last_used, updated_at)
                 VALUES (@appName, @date, @totalSeconds, @sessionCount, @firstUsed, @lastUsed, @updatedAt)
                 ON CONFLICT(app_name, date) DO UPDATE SET
-                    total_seconds = total_seconds + @totalSeconds,
-                    session_count = session_count + @sessionCount,
+                    total_seconds = @totalSeconds,
+                    session_count = @sessionCount,
                     first_used = MIN(first_used, @firstUsed),
                     last_used = MAX(last_used, @lastUsed),
                     updated_at = @updatedAt
@@ -140,8 +154,8 @@ public class UsageRepository : IDisposable
                     INSERT INTO app_usage (app_name, date, total_seconds, session_count, first_used, last_used, updated_at)
                     VALUES (@appName, @date, @totalSeconds, @sessionCount, @firstUsed, @lastUsed, @updatedAt)
                     ON CONFLICT(app_name, date) DO UPDATE SET
-                        total_seconds = total_seconds + @totalSeconds,
-                        session_count = session_count + @sessionCount,
+                        total_seconds = @totalSeconds,
+                        session_count = @sessionCount,
                         first_used = MIN(first_used, @firstUsed),
                         last_used = MAX(last_used, @lastUsed),
                         updated_at = @updatedAt
@@ -192,27 +206,20 @@ public class UsageRepository : IDisposable
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
-                var stats = new AppUsageStats(reader.GetString(0), date);
-                // We need to set the internal state - using reflection or making fields settable
-                // For simplicity, we'll create a new stats and manually populate
+                var appName = reader.GetString(0);
                 var totalSeconds = reader.GetInt64(2);
                 var sessionCount = reader.GetInt32(3);
                 var firstUsed = DateTime.Parse(reader.GetString(4));
                 var lastUsed = DateTime.Parse(reader.GetString(5));
 
-                // Create a dummy session to populate stats
-                for (int i = 0; i < sessionCount; i++)
-                {
-                    var dummyDuration = TimeSpan.FromSeconds(totalSeconds / sessionCount);
-                    var session = new UsageSession(
-                        stats.AppName,
-                        0,
-                        null,
-                        i == 0 ? firstUsed : lastUsed.AddSeconds(-1),
-                        i == 0 ? firstUsed.Add(dummyDuration) : lastUsed
-                    );
-                    stats.AddSession(session);
-                }
+                // Create stats and restore values directly
+                var stats = new AppUsageStats(appName, date);
+                stats.SetFromDatabase(
+                    TimeSpan.FromSeconds(totalSeconds),
+                    sessionCount,
+                    firstUsed,
+                    lastUsed
+                );
 
                 results.Add(stats);
             }
@@ -395,6 +402,89 @@ public class UsageRepository : IDisposable
         {
             Logger.Error($"Failed to set category for {appName}: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Saves a batch of sessions to the database.
+    /// </summary>
+    public void SaveSessionsBatch(IEnumerable<UsageSession> sessions)
+    {
+        EnsureInitialized();
+        var sessionList = sessions.ToList();
+        if (sessionList.Count == 0) return;
+
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+            using var transaction = connection.BeginTransaction();
+
+            foreach (var session in sessionList)
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText = @"
+                    INSERT INTO app_sessions (app_name, start_time, end_time, duration_seconds, date, website_domain, created_at)
+                    VALUES (@appName, @startTime, @endTime, @duration, @date, @domain, @createdAt)
+                ";
+                command.Parameters.AddWithValue("@appName", session.AppName);
+                command.Parameters.AddWithValue("@startTime", session.StartTime.ToString("o"));
+                command.Parameters.AddWithValue("@endTime", session.EndTime.ToString("o"));
+                command.Parameters.AddWithValue("@duration", (long)session.Duration.TotalSeconds);
+                command.Parameters.AddWithValue("@date", session.Date.ToString("yyyy-MM-dd"));
+                command.Parameters.AddWithValue("@domain", session.WebsiteDomain ?? (object)DBNull.Value);
+                command.Parameters.AddWithValue("@createdAt", DateTime.Now.ToString("o"));
+                command.ExecuteNonQuery();
+            }
+
+            transaction.Commit();
+            Logger.Debug($"Saved batch of {sessionList.Count} sessions");
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to save sessions batch: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Gets all sessions for a specific date (for hourly breakdown).
+    /// </summary>
+    public List<UsageSession> GetSessionsForDate(DateOnly date)
+    {
+        EnsureInitialized();
+        var results = new List<UsageSession>();
+
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                SELECT app_name, start_time, end_time, website_domain
+                FROM app_sessions
+                WHERE date = @date
+                ORDER BY start_time ASC
+            ";
+            command.Parameters.AddWithValue("@date", date.ToString("yyyy-MM-dd"));
+
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                var appName = reader.GetString(0);
+                var startTime = DateTime.Parse(reader.GetString(1));
+                var endTime = DateTime.Parse(reader.GetString(2));
+                var domain = reader.IsDBNull(3) ? null : reader.GetString(3);
+
+                var session = new UsageSession(appName, 0, null, startTime, endTime, domain);
+                results.Add(session);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to get sessions for date: {ex.Message}");
+        }
+
+        return results;
     }
 
     private void EnsureInitialized()
