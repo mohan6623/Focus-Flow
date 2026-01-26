@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
+using ScreenTimeTracker.Services;
 
 namespace ScreenTimeTracker.App;
 
@@ -15,6 +16,8 @@ public partial class FocusTimerWindow : Window
 {
     private readonly DispatcherTimer _timer;
     private readonly DispatcherTimer _clickTimer;
+    private readonly AppBlockerService? _appBlockerService;
+    private BlockedAppOverlay? _blockedOverlay;
     private TimeSpan _remainingTime;
     private TimeSpan _totalTime;
     private bool _isPaused;
@@ -45,7 +48,7 @@ public partial class FocusTimerWindow : Window
         }
     }
 
-    public FocusTimerWindow(int focusMinutes = 25)
+    public FocusTimerWindow(int focusMinutes = 25, AppBlockerService? appBlockerService = null)
     {
         InitializeComponent();
         
@@ -56,6 +59,13 @@ public partial class FocusTimerWindow : Window
         _clickCount = 0;
         _showTimeSpent = false;
         _isDragging = false;
+        _appBlockerService = appBlockerService;
+
+        // Subscribe to blocked app detection
+        if (_appBlockerService != null)
+        {
+            _appBlockerService.BlockedAppDetected += OnBlockedAppDetected;
+        }
 
         // Position near taskbar (bottom-left of screen)
         this.Loaded += (s, e) =>
@@ -413,5 +423,36 @@ public partial class FocusTimerWindow : Window
         
         UpdateDisplay();
         _timer.Start();
+    }
+
+    private void OnBlockedAppDetected(object? sender, BlockedAppEventArgs e)
+    {
+        // Show overlay on UI thread
+        Dispatcher.Invoke(() =>
+        {
+            if (_blockedOverlay == null)
+            {
+                _blockedOverlay = new BlockedAppOverlay(_appBlockerService!);
+            }
+
+            if (!_blockedOverlay.IsVisible)
+            {
+                _blockedOverlay.ShowForApp(e.AppName);
+            }
+        });
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        // Unsubscribe from blocker events
+        if (_appBlockerService != null)
+        {
+            _appBlockerService.BlockedAppDetected -= OnBlockedAppDetected;
+        }
+
+        // Close overlay if open
+        _blockedOverlay?.Close();
+
+        base.OnClosed(e);
     }
 }

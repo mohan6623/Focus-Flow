@@ -19,28 +19,34 @@ public partial class DashboardWindow : Window
     private readonly SystemTimeService _systemTimeService;
     private readonly TrayIconManager _trayIconManager;
     private readonly DispatcherTimer _refreshTimer;
-    private readonly CategoryService _categoryService; // Ensure this is available, or use aggregation service if integrated
+    private readonly FocusService _focusService;
+    private readonly AppBlockerService _appBlockerService;
+    private readonly Tracking.ForegroundAppTracker _foregroundTracker;
+    private readonly StreakService _streakService;
 
-    // Colors matching the design
+    // Tempo Theme Colors
     private readonly SolidColorBrush[] _appColors = new[]
     {
-        (SolidColorBrush)new BrushConverter().ConvertFrom("#00E096")!, // Teal (Top 1)
-        (SolidColorBrush)new BrushConverter().ConvertFrom("#FFFFFF")!, // White (Top 2)
-        (SolidColorBrush)new BrushConverter().ConvertFrom("#A0A0A0")!, // Light Grey (Top 3)
-        (SolidColorBrush)new BrushConverter().ConvertFrom("#404040")!, // Dark Grey (Top 4)
+        (SolidColorBrush)new BrushConverter().ConvertFrom("#9333EA")!, // Purple (Top 1)
+        (SolidColorBrush)new BrushConverter().ConvertFrom("#A855F7")!, // Light Purple (Top 2)
+        (SolidColorBrush)new BrushConverter().ConvertFrom("#C084FC")!, // Lighter Purple (Top 3)
+        (SolidColorBrush)new BrushConverter().ConvertFrom("#E9D5FF")!, // Lavender (Top 4)
     };
 
-    // Track if showing hourly detail view
-    private bool _isShowingHourlyDetail = false;
-    private DateOnly? _hourlyDetailDate = null;
-
-    public DashboardWindow(AggregationService aggregationService, SystemTimeService systemTimeService, TrayIconManager trayIconManager)
+    public DashboardWindow(AggregationService aggregationService, SystemTimeService systemTimeService, TrayIconManager trayIconManager, FocusService focusService, AppBlockerService appBlockerService, Tracking.ForegroundAppTracker foregroundTracker, StreakService streakService)
     {
         InitializeComponent();
         
         _aggregationService = aggregationService;
         _systemTimeService = systemTimeService;
         _trayIconManager = trayIconManager;
+        _focusService = focusService;
+        _appBlockerService = appBlockerService;
+        _foregroundTracker = foregroundTracker;
+        _streakService = streakService;
+        
+        // Subscribe to streak updates
+        _streakService.StreakUpdated += (s, e) => UpdateStreakDisplay();
 
         // Custom Window Dragging - only drag from non-interactive areas
         this.MouseLeftButtonDown += (s, e) => 
@@ -78,10 +84,97 @@ public partial class DashboardWindow : Window
     private void UpdateQuickStats()
     {
         var totalScreenTime = _aggregationService.GetTotalScreenTimeToday();
-        var systemUptime = _systemTimeService.GetSystemUptime();
-
         TxtActiveTime.Text = FormatTime(totalScreenTime);
-        TxtUptime.Text = FormatTime(systemUptime);
+        
+        // Update streak display
+        UpdateStreakDisplay();
+    }
+    
+    private void UpdateStreakDisplay()
+    {
+        var streak = _streakService.CurrentStreak;
+        TxtStreakCount.Text = streak.ToString();
+        // TxtStreakMessage is a Run
+        TxtStreakMessage.Text = _streakService.GetStreakMessage();
+        
+        // Populate visual bubbles (Current Week: Mon-Sun)
+        StreakDaysGrid.Children.Clear();
+        StreakDaysGrid.ColumnDefinitions.Clear();
+        StreakDaysGrid.RowDefinitions.Clear();
+        
+        // Definitions
+        StreakDaysGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Labels
+        StreakDaysGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Bubbles
+        
+        for (int i = 0; i < 7; i++)
+            StreakDaysGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        // Find Monday of current week
+        int daysSinceMonday = ((int)today.DayOfWeek == 0) ? 6 : (int)today.DayOfWeek - 1;
+        var startOfWeek = today.AddDays(-daysSinceMonday);
+
+        var lastSession = _streakService.LastSessionDate; 
+        
+        for (int i = 0; i < 7; i++)
+        {
+            var date = startOfWeek.AddDays(i);
+            
+            // 1. Label
+            var dayLabel = new TextBlock
+            {
+                Text = date.DayOfWeek.ToString().Substring(0, 1), // M, T...
+                FontSize = 10, 
+                FontWeight = FontWeights.Medium,
+                Foreground = new SolidColorBrush(Color.FromRgb(156, 163, 175)), // Gray-400
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 6)
+            };
+            Grid.SetRow(dayLabel, 0);
+            Grid.SetColumn(dayLabel, i);
+            StreakDaysGrid.Children.Add(dayLabel);
+
+            // 2. Bubble
+            bool isCompleted = false;
+            if (streak > 0 && lastSession.HasValue)
+            {
+                // Check if date is within the streak range ending at LastSession
+                var startOfStreak = lastSession.Value.AddDays(-(streak - 1));
+                if (date >= startOfStreak && date <= lastSession.Value)
+                {
+                    isCompleted = true;
+                }
+            }
+
+            var bubble = new Border
+            {
+                Width = 22, Height = 22,
+                CornerRadius = new CornerRadius(11),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Background = isCompleted 
+                    ? new SolidColorBrush(Color.FromRgb(239, 68, 68)) // Red-500
+                    : new SolidColorBrush(Color.FromRgb(229, 231, 235)) // Gray-200
+            };
+            
+            if (isCompleted)
+            {
+                // Checkmark
+                var check = new TextBlock
+                {
+                    Text = "✓",
+                    FontSize = 12,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = Brushes.White,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                bubble.Child = check;
+            }
+
+            Grid.SetRow(bubble, 1);
+            Grid.SetColumn(bubble, i);
+            StreakDaysGrid.Children.Add(bubble);
+        }
     }
 
     private void UpdateGeneralStats()
@@ -225,7 +318,7 @@ public partial class DashboardWindow : Window
         var nameTxt = new TextBlock
         {
             Text = app.AppName.Replace(".exe", "", StringComparison.OrdinalIgnoreCase), // Clean name
-            Foreground = new SolidColorBrush(Color.FromRgb(200, 200, 200)),
+            Foreground = new SolidColorBrush(Color.FromRgb(107, 114, 128)), // Gray-500
             FontSize = 14,
             TextTrimming = TextTrimming.CharacterEllipsis,
             Margin = new Thickness(5, 0, 10, 0),
@@ -236,7 +329,7 @@ public partial class DashboardWindow : Window
         var timeTxt = new TextBlock
         {
             Text = FormatTimeCompact(app.TotalTime),
-            Foreground = Brushes.White,
+            Foreground = new SolidColorBrush(Color.FromRgb(31, 41, 55)), // Gray-800
             FontWeight = FontWeights.SemiBold,
             VerticalAlignment = VerticalAlignment.Center
         };
@@ -298,20 +391,20 @@ public partial class DashboardWindow : Window
             barGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1 - pct, GridUnitType.Star) }); // Empty top
             barGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(pct, GridUnitType.Star) }); // Filled bottom
 
-            // Create gradient brush for active bars - more vibrant look
+            // Create gradient brush for active bars - Tempo theme
             Brush barBrush;
             if (isToday)
             {
                 barBrush = new LinearGradientBrush(
-                    Color.FromRgb(0, 240, 160), // Bright teal
-                    Color.FromRgb(0, 200, 130), // Slightly darker
+                    Color.FromRgb(147, 51, 234), // Purple-600
+                    Color.FromRgb(126, 34, 206), // Purple-700
                     90);
             }
             else
             {
                 barBrush = new LinearGradientBrush(
-                    Color.FromRgb(80, 80, 80),
-                    Color.FromRgb(50, 50, 50),
+                    Color.FromRgb(233, 213, 255), // Purple-200
+                    Color.FromRgb(216, 180, 254), // Purple-300
                     90);
             }
 
@@ -322,10 +415,10 @@ public partial class DashboardWindow : Window
                 VerticalAlignment = VerticalAlignment.Stretch,
                 Effect = isToday ? new System.Windows.Media.Effects.DropShadowEffect
                 {
-                    Color = Color.FromRgb(0, 224, 150),
+                    Color = Color.FromRgb(147, 51, 234), // Purple glow
                     BlurRadius = 12,
                     ShadowDepth = 0,
-                    Opacity = 0.5
+                    Opacity = 0.4
                 } : null
             };
             
@@ -340,7 +433,7 @@ public partial class DashboardWindow : Window
             var dayLabel = new TextBlock
             {
                 Text = date.ToString("ddd"), // Mon, Tue...
-                Foreground = isToday ? new SolidColorBrush(Color.FromRgb(0, 240, 160)) : new SolidColorBrush(Color.FromRgb(140, 140, 140)),
+                Foreground = isToday ? new SolidColorBrush(Color.FromRgb(147, 51, 234)) : new SolidColorBrush(Color.FromRgb(107, 114, 128)), // Purple or Gray
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Margin = new Thickness(0, 8, 0, 0),
                 FontSize = 12,
@@ -371,9 +464,21 @@ public partial class DashboardWindow : Window
         return $"{t.TotalSeconds:F0}s";
     }
 
+    private void MinimizeButton_Click(object sender, RoutedEventArgs e)
+    {
+        this.WindowState = WindowState.Minimized;
+    }
+
+    private void DebugButton_Click(object sender, RoutedEventArgs e)
+    {
+        var debugWin = new DebugWindow(_foregroundTracker);
+        debugWin.Owner = this;
+        debugWin.Show();
+    }
+
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {
-        this.Hide();
+        this.Hide(); // Don't close, just hide to tray
     }
 
     private bool IsClickOnGraphBar(System.Windows.Input.MouseButtonEventArgs e)
@@ -401,8 +506,6 @@ public partial class DashboardWindow : Window
     private void BackToWeekly_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         e.Handled = true;
-        _isShowingHourlyDetail = false;
-        _hourlyDetailDate = null;
         
         // Hide hourly view
         HourlyGraphContainer.Visibility = Visibility.Collapsed;
@@ -414,10 +517,6 @@ public partial class DashboardWindow : Window
 
     private void ShowHourlyDetail(DateOnly date)
     {
-        // Mark that we're showing hourly detail
-        _isShowingHourlyDetail = true;
-        _hourlyDetailDate = date;
-        
         // Update header
         TxtReportSubtitle.Text = $"{date:ddd, MMM d} - Hourly Breakdown";
         ((TextBlock)((Border)ViewModeBadge).Child).Text = "Hourly View";
@@ -468,25 +567,25 @@ public partial class DashboardWindow : Window
             barGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1 - pct, GridUnitType.Star) }); // Empty top
             barGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(pct, GridUnitType.Star) }); // Filled bottom
 
-            // Create gradient brush for active bars
+            // Create gradient brush for active bars - Tempo theme
             Brush barBrush = hourlyMinutes[h] > 0 
                 ? new LinearGradientBrush(
-                    Color.FromRgb(0, 224, 150), // Bright teal
-                    Color.FromRgb(0, 180, 120), // Darker teal
+                    Color.FromRgb(147, 51, 234), // Purple-600
+                    Color.FromRgb(126, 34, 206), // Purple-700
                     90)
-                : new SolidColorBrush(Color.FromRgb(40, 40, 40));
+                : new SolidColorBrush(Color.FromRgb(243, 244, 246)); // Gray-100;
 
             var bar = new Border
             {
                 Background = barBrush,
-                CornerRadius = new CornerRadius(2),
+                CornerRadius = new CornerRadius(4),
                 VerticalAlignment = VerticalAlignment.Stretch,
                 Effect = hourlyMinutes[h] > 0 ? new System.Windows.Media.Effects.DropShadowEffect
                 {
-                    Color = Color.FromRgb(0, 224, 150),
+                    Color = Color.FromRgb(147, 51, 234), // Purple glow
                     BlurRadius = 8,
                     ShadowDepth = 0,
-                    Opacity = 0.4
+                    Opacity = 0.3
                 } : null
             };
             
@@ -504,7 +603,7 @@ public partial class DashboardWindow : Window
                     Text = $"{h}h", 
                     FontSize = 10,
                     FontWeight = FontWeights.Medium,
-                    Foreground = new SolidColorBrush(Color.FromRgb(180, 180, 180)),
+                    Foreground = new SolidColorBrush(Color.FromRgb(107, 114, 128)), // Gray-500
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center
                 };
@@ -532,8 +631,11 @@ public partial class DashboardWindow : Window
         // Start tray focus mode
         _trayIconManager.StartFocusMode(selectedMinutes);
 
-        // Open the Focus Timer popup with selected duration
-        var focusWindow = new FocusTimerWindow(selectedMinutes);
+        // Start focus session in service (enables app blocking)
+        _focusService.StartFocusSession();
+
+        // Open the Focus Timer popup with selected duration and blocker service
+        var focusWindow = new FocusTimerWindow(selectedMinutes, _appBlockerService);
         
         // Wire up timer tick to update tray
         focusWindow.TimerTick += (s, args) =>
@@ -550,19 +652,21 @@ public partial class DashboardWindow : Window
         focusWindow.SessionCompleted += (s, args) =>
         {
             _trayIconManager.EndFocusMode();
-            // TODO: Log completed session to FocusService
+            _focusService.EndFocusSession(completed: true);
+            _streakService.RecordSessionCompletion();
         };
         
         focusWindow.SessionCancelled += (s, args) =>
         {
             _trayIconManager.EndFocusMode();
-            // TODO: Log cancelled session
+            _focusService.EndFocusSession(completed: false);
         };
 
         // Handle window closed (e.g., if user closes via other means)
         focusWindow.Closed += (s, args) =>
         {
             _trayIconManager.EndFocusMode();
+            _focusService.EndFocusSession(completed: false);
         };
 
         focusWindow.Show();

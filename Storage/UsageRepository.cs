@@ -79,6 +79,17 @@ public class UsageRepository : IDisposable
 
                 CREATE INDEX IF NOT EXISTS idx_app_sessions_date ON app_sessions(date);
                 CREATE INDEX IF NOT EXISTS idx_app_sessions_app_name ON app_sessions(app_name);
+
+                CREATE TABLE IF NOT EXISTS focus_streaks (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    current_streak INTEGER NOT NULL DEFAULT 0,
+                    longest_streak INTEGER NOT NULL DEFAULT 0,
+                    last_session_date TEXT,
+                    updated_at TEXT NOT NULL
+                );
+
+                INSERT OR IGNORE INTO focus_streaks (id, current_streak, longest_streak, updated_at)
+                VALUES (1, 0, 0, datetime('now'));
             ";
             command.ExecuteNonQuery();
 
@@ -485,6 +496,87 @@ public class UsageRepository : IDisposable
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Gets the current streak data.
+    /// </summary>
+    public (int CurrentStreak, int LongestStreak, DateOnly? LastSessionDate) GetStreakData()
+    {
+        EnsureInitialized();
+
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                SELECT current_streak, longest_streak, last_session_date
+                FROM focus_streaks
+                WHERE id = 1
+            ";
+
+            using var reader = command.ExecuteReader();
+            if (reader.Read())
+            {
+                var currentStreak = reader.GetInt32(0);
+                var longestStreak = reader.GetInt32(1);
+                DateOnly? lastSessionDate = null;
+                
+                if (!reader.IsDBNull(2))
+                {
+                    var dateStr = reader.GetString(2);
+                    if (DateOnly.TryParse(dateStr, out var parsed))
+                    {
+                        lastSessionDate = parsed;
+                    }
+                }
+
+                return (currentStreak, longestStreak, lastSessionDate);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to get streak data: {ex.Message}");
+        }
+
+        return (0, 0, null);
+    }
+
+    /// <summary>
+    /// Saves the streak data.
+    /// </summary>
+    public void SaveStreakData(int currentStreak, int longestStreak, DateOnly? lastSessionDate)
+    {
+        EnsureInitialized();
+
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                UPDATE focus_streaks
+                SET current_streak = @current,
+                    longest_streak = @longest,
+                    last_session_date = @lastDate,
+                    updated_at = @updatedAt
+                WHERE id = 1
+            ";
+            command.Parameters.AddWithValue("@current", currentStreak);
+            command.Parameters.AddWithValue("@longest", longestStreak);
+            command.Parameters.AddWithValue("@lastDate", lastSessionDate?.ToString("yyyy-MM-dd") ?? (object)DBNull.Value);
+            command.Parameters.AddWithValue("@updatedAt", DateTime.Now.ToString("o"));
+
+            command.ExecuteNonQuery();
+            Logger.Debug($"Saved streak data: current={currentStreak}, longest={longestStreak}");
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to save streak data: {ex.Message}");
+        }
     }
 
     private void EnsureInitialized()

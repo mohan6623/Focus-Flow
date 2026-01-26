@@ -20,7 +20,8 @@ public class BrowserTabResolver
         "opera",
         "vivaldi",
         "iexplore",
-        "arc"
+        "arc",
+        "comet"
     };
 
     // Map of well-known domains to friendly names
@@ -187,7 +188,7 @@ public class BrowserTabResolver
 
     private static bool IsChromiumBrowser(string processName)
     {
-        var chromiumBrowsers = new[] { "chrome", "msedge", "brave", "vivaldi", "opera", "arc" };
+        var chromiumBrowsers = new[] { "chrome", "msedge", "brave", "vivaldi", "opera", "arc", "comet" };
         return chromiumBrowsers.Contains(processName.ToLowerInvariant().Replace(".exe", ""));
     }
 
@@ -200,14 +201,16 @@ public class BrowserTabResolver
             var condition = new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Edit);
             var editElements = browserWindow.FindAll(TreeScope.Descendants, condition);
 
+            // First pass: Check by AutomationId (most reliable for Chromium browsers)
             foreach (AutomationElement edit in editElements)
             {
                 try
                 {
-                    // Check if this is the address bar by looking at the name
-                    var name = edit.Current.Name?.ToLowerInvariant() ?? "";
-                    if (name.Contains("address") || name.Contains("url") || name.Contains("search") ||
-                        name.Contains("omnibox") || name.Contains("location"))
+                    var automationId = edit.Current.AutomationId?.ToLowerInvariant() ?? "";
+                    // Chromium browsers typically use "addressbar" or similar AutomationId
+                    if (automationId.Contains("address") || automationId.Contains("url") || 
+                        automationId.Contains("omnibox") || automationId.Contains("location") ||
+                        automationId.Contains("edit") || automationId == "view_id_117") // Chrome's address bar ID
                     {
                         if (edit.TryGetCurrentPattern(ValuePattern.Pattern, out var pattern))
                         {
@@ -215,6 +218,7 @@ public class BrowserTabResolver
                             var url = valuePattern.Current.Value;
                             if (!string.IsNullOrEmpty(url) && (url.Contains("://") || url.Contains(".")))
                             {
+                                Logger.Debug($"Got URL via AutomationId '{automationId}': {url}");
                                 return url;
                             }
                         }
@@ -226,7 +230,36 @@ public class BrowserTabResolver
                 }
             }
 
-            // Alternative: Try to find by looking for edit controls with URL-like values
+            // Second pass: Check by Name property
+            foreach (AutomationElement edit in editElements)
+            {
+                try
+                {
+                    // Check if this is the address bar by looking at the name
+                    var name = edit.Current.Name?.ToLowerInvariant() ?? "";
+                    if (name.Contains("address") || name.Contains("url") || name.Contains("search") ||
+                        name.Contains("omnibox") || name.Contains("location") || name.Contains("navigate") ||
+                        name.Contains("bar") || name.Contains("enter") || name.Contains("type"))
+                    {
+                        if (edit.TryGetCurrentPattern(ValuePattern.Pattern, out var pattern))
+                        {
+                            var valuePattern = (ValuePattern)pattern;
+                            var url = valuePattern.Current.Value;
+                            if (!string.IsNullOrEmpty(url) && (url.Contains("://") || url.Contains(".")))
+                            {
+                                Logger.Debug($"Got URL via Name '{name}': {url}");
+                                return url;
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    // Continue to next element
+                }
+            }
+
+            // Third pass: Try to find by looking for edit controls with URL-like values
             foreach (AutomationElement edit in editElements)
             {
                 try
@@ -241,6 +274,7 @@ public class BrowserTabResolver
                             (value.StartsWith("http://") || value.StartsWith("https://") ||
                              (value.Contains(".") && !value.Contains(" ") && value.Length > 3)))
                         {
+                            Logger.Debug($"Got URL via value scan: {value}");
                             return value;
                         }
                     }
@@ -413,6 +447,7 @@ public class BrowserTabResolver
             "vivaldi" => "Vivaldi",
             "opera" => "Opera",
             "arc" => "Arc",
+            "comet" => "Comet",
             _ => null
         };
     }

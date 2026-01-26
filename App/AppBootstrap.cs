@@ -31,6 +31,9 @@ public class AppBootstrap : IDisposable
     private readonly SystemTimeService _systemTimeService;
     private readonly CategoryService _categoryService;
     private readonly BrowserTabResolver _browserTabResolver;
+    private readonly FocusService _focusService;
+    private readonly AppBlockerService _appBlockerService;
+    private readonly StreakService _streakService;
     
     // UI
     private DashboardWindow? _dashboardWindow;
@@ -81,6 +84,13 @@ public class AppBootstrap : IDisposable
         
         // Initialize category service
         _categoryService = new CategoryService(_repository);
+
+        // Initialize focus and app blocker services
+        _focusService = new FocusService(_repository);
+        _appBlockerService = new AppBlockerService(_focusService, _foregroundTracker);
+        
+        // Initialize streak service
+        _streakService = new StreakService(_repository);
 
         // Initialize tray
         _trayIconManager = new TrayIconManager();
@@ -273,7 +283,7 @@ public class AppBootstrap : IDisposable
     {
         if (_dashboardWindow == null || !_dashboardWindow.IsLoaded)
         {
-            _dashboardWindow = new DashboardWindow(_aggregationService, _systemTimeService, _trayIconManager!);
+            _dashboardWindow = new DashboardWindow(_aggregationService, _systemTimeService, _trayIconManager!, _focusService, _appBlockerService, _foregroundTracker, _streakService);
             _dashboardWindow.Closed += (s, e) => _dashboardWindow = null;
         }
 
