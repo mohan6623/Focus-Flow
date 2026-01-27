@@ -117,10 +117,13 @@ public class TrayIconManager : IDisposable
             ContextMenuStrip = _contextMenu
         };
 
-        _notifyIcon.Click += (s, e) =>
+        _notifyIcon.MouseClick += (s, e) =>
         {
-            // Open dashboard on single click
-            StatsRequested?.Invoke(this, EventArgs.Empty);
+            // Open dashboard only on left click
+            if (e.Button == MouseButtons.Left)
+            {
+                StatsRequested?.Invoke(this, EventArgs.Empty);
+            }
         };
     }
 

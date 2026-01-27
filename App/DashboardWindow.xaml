@@ -11,32 +11,11 @@
         Background="Transparent">
 
     <Window.Resources>
-        <!-- Tempo Theme Colors -->
-        <Color x:Key="BgColor">#F8F6FA</Color>
-        <Color x:Key="CardColor">#FFFFFF</Color>
-        <Color x:Key="AccentColor">#9333EA</Color>
-        <Color x:Key="AccentLightColor">#E9D5FF</Color>
-        <Color x:Key="SecondaryTextColor">#6B7280</Color>
-        <Color x:Key="PrimaryTextColor">#1F2937</Color>
-        <Color x:Key="SuccessColor">#22C55E</Color>
-        <Color x:Key="WarningColor">#F59E0B</Color>
-        <Color x:Key="DangerColor">#EF4444</Color>
-        <Color x:Key="SidebarBgColor">#FFFFFF</Color>
+        <!-- Styles using DynamicResource -->
         
-        <SolidColorBrush x:Key="BgBrush" Color="{StaticResource BgColor}"/>
-        <SolidColorBrush x:Key="CardBrush" Color="{StaticResource CardColor}"/>
-        <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}"/>
-        <SolidColorBrush x:Key="AccentLightBrush" Color="{StaticResource AccentLightColor}"/>
-        <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource PrimaryTextColor}"/>
-        <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource SecondaryTextColor}"/>
-        <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource SuccessColor}"/>
-        <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource WarningColor}"/>
-        <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource DangerColor}"/>
-        <SolidColorBrush x:Key="SidebarBgBrush" Color="{StaticResource SidebarBgColor}"/>
-
         <!-- Card Style -->
         <Style x:Key="CardStyle" TargetType="Border">
-            <Setter Property="Background" Value="{StaticResource CardBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource CardBrush}"/>
             <Setter Property="CornerRadius" Value="16"/>
             <Setter Property="Padding" Value="20"/>
             <Setter Property="Effect">
@@ -49,7 +28,7 @@
         <!-- Sidebar Navigation Button Style -->
         <Style x:Key="NavButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
@@ -63,8 +42,8 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource AccentLightBrush}"/>
-                                <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource AccentLightBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -74,14 +53,14 @@
 
         <!-- Active Nav Button Style -->
         <Style x:Key="NavButtonActiveStyle" TargetType="Button" BasedOn="{StaticResource NavButtonStyle}">
-            <Setter Property="Background" Value="{StaticResource AccentLightBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource AccentLightBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
         </Style>
 
         <!-- Modern Button Style -->
         <Style TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -95,14 +74,14 @@
             </Setter>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
 
         <!-- Primary Button Style -->
         <Style x:Key="PrimaryButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -124,10 +103,85 @@
             </Setter>
         </Style>
 
+
+        <!-- Custom ScrollBar Style -->
+        <Style x:Key="DarkScrollBarStyle" TargetType="{x:Type ScrollBar}">
+            <Setter Property="Stylus.IsFlicksEnabled" Value="false"/>
+            <Setter Property="Foreground" Value="#374151"/> <!-- Gray-700 Arrow -->
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Width" Value="12"/> <!-- Slightly wider for usability -->
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ScrollBar}">
+                        <Grid x:Name="GridRoot" Width="12" Background="Transparent">
+                            <Grid.RowDefinitions>
+                                <RowDefinition MaxHeight="18"/>
+                                <RowDefinition Height="0.00001*"/>
+                                <RowDefinition MaxHeight="18"/>
+                            </Grid.RowDefinitions>
+                            
+                            <!-- Track -->
+                             <Border Grid.RowSpan="3" CornerRadius="6" Background="Transparent"/> 
+
+                            <!-- Up Button -->
+                            <RepeatButton x:Name="DecreaseRepeat" Command="ScrollBar.LineUpCommand" Foreground="#4B5563" Style="{DynamicResource ScrollBarButtonStyle}">
+                                <Path Data="M 0 4 L 4 0 L 8 4 Z" Fill="#6B7280" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </RepeatButton>
+
+                            <!-- Track Area (Thumb) -->
+                            <Track x:Name="PART_Track" Grid.Row="1" IsDirectionReversed="true" Focusable="false">
+                                <Track.Thumb>
+                                    <Thumb Style="{DynamicResource ScrollBarThumbStyle}"/>
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageDownCommand" Opacity="0" Focusable="false" Background="Transparent"/>
+                                </Track.IncreaseRepeatButton>
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageUpCommand" Opacity="0" Focusable="false" Background="Transparent"/>
+                                </Track.DecreaseRepeatButton>
+                            </Track>
+                            
+                            <!-- Down Button -->
+                            <RepeatButton x:Name="IncreaseRepeat" Grid.Row="2" Command="ScrollBar.LineDownCommand" Foreground="#4B5563" Style="{DynamicResource ScrollBarButtonStyle}">
+                                <Path Data="M 0 0 L 4 4 L 8 0 Z" Fill="#6B7280" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </RepeatButton>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ScrollBar Thumb Style -->
+        <Style x:Key="ScrollBarThumbStyle" TargetType="{x:Type Thumb}">
+            <Setter Property="IsTabStop" Value="False"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Thumb}">
+                        <Border CornerRadius="4" Background="#4B5563" Margin="2" Width="8"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ScrollBar Button Style -->
+        <Style x:Key="ScrollBarButtonStyle" TargetType="{x:Type RepeatButton}">
+            <Setter Property="IsTabStop" Value="False"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type RepeatButton}">
+                        <Border Background="Transparent">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <!-- Main Container with Rounded Corners for the Window itself -->
-    <Border Background="{StaticResource BgBrush}" CornerRadius="16" BorderThickness="1" BorderBrush="#E5E7EB">
+    <Border Background="{DynamicResource BgBrush}" CornerRadius="16" BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}">
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="220"/> <!-- Sidebar -->
@@ -135,7 +189,7 @@
             </Grid.ColumnDefinitions>
 
             <!-- Sidebar -->
-            <Border Grid.Column="0" Background="{StaticResource SidebarBgBrush}" CornerRadius="16,0,0,16">
+            <Border Grid.Column="0" Background="{DynamicResource SidebarBgBrush}" CornerRadius="16,0,0,16">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/> <!-- Logo -->
@@ -147,8 +201,8 @@
 
                     <!-- Logo/Brand -->
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="20,24,20,30">
-                        <Ellipse Width="36" Height="36" Fill="{StaticResource AccentBrush}"/>
-                        <TextBlock Text="FocusFlow" FontSize="20" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                        <Ellipse Width="36" Height="36" Fill="{DynamicResource AccentBrush}"/>
+                        <TextBlock Text="FocusFlow" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="12,0,0,0"/>
                     </StackPanel>
 
                     <!-- Navigation Items -->
@@ -209,11 +263,28 @@
                 <!-- 1. Header -->
                 <Grid Grid.Row="0" Margin="0,0,0,24">
                     <StackPanel>
-                        <TextBlock Text="Dashboard" FontSize="28" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" FontFamily="Segoe UI Variable Display"/>
-                        <TextBlock Text="Overview of your digital habits" FontSize="14" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,5,0,0"/>
+                        <TextBlock Text="Dashboard" FontSize="28" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" FontFamily="Segoe UI Variable Display"/>
+                        <TextBlock Text="Overview of your digital habits" FontSize="14" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,5,0,0"/>
                     </StackPanel>
                     
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
+                         <!-- Theme Toggle -->
+                         <Button x:Name="BtnThemeTheme" 
+                                 Click="ThemeButton_Click"
+                                 Width="36" Height="36"
+                                 Margin="0,0,10,0"
+                                 Background="{DynamicResource CardBrush}"
+                                 Foreground="{DynamicResource TextPrimaryBrush}">
+                             <TextBlock Text="🌙" FontSize="16"/>
+                             <Button.Template>
+                                 <ControlTemplate TargetType="Button">
+                                     <Border Background="{TemplateBinding Background}" CornerRadius="18">
+                                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                     </Border>
+                                 </ControlTemplate>
+                             </Button.Template>
+                         </Button>
+
                          <!-- Focus Button (Star Feature) -->
                          <Button x:Name="BtnFocus" 
                                  Style="{StaticResource PrimaryButtonStyle}"
@@ -226,7 +297,7 @@
                          </Button>
                          <Button x:Name="BtnMinimize" 
                             Content="—" 
-                            Foreground="{StaticResource TextSecondaryBrush}" 
+                            Foreground="{DynamicResource TextSecondaryBrush}" 
                             Background="Transparent"
                             BorderThickness="0"
                             Width="30" Height="30"
@@ -235,7 +306,7 @@
                     
                     <Button x:Name="BtnDebug" 
                             Content="🐞" 
-                            Foreground="{StaticResource TextSecondaryBrush}" 
+                            Foreground="{DynamicResource TextSecondaryBrush}" 
                             Background="Transparent"
                             BorderThickness="0"
                             Width="30" Height="30"
@@ -245,7 +316,7 @@
 
                     <Button x:Name="BtnClose" 
                             Content="✕" 
-                            Foreground="{StaticResource TextSecondaryBrush}" 
+                            Foreground="{DynamicResource TextSecondaryBrush}" 
                             Background="Transparent"
                             BorderThickness="0"
                             Width="30" Height="30"
@@ -255,55 +326,15 @@
                 </Grid>
 
                 <!-- 2. Main Dashboard Grid -->
+                <!-- Use 2 Columns -->
                 <Grid Grid.Row="1">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="3.5*"/> <!-- General Statistics -->
-                        <ColumnDefinition Width="4*"/>   <!-- Daily Report -->
-                        <ColumnDefinition Width="2.5*"/> <!-- Quick Stats -->
+                        <ColumnDefinition Width="6*"/>   <!-- Daily Report -->
+                        <ColumnDefinition Width="3.5*"/> <!-- Reorganized Stats -->
                     </Grid.ColumnDefinitions>
-
-                    <!-- COL 1: General Statistics -->
+                    
+                    <!-- COL 1: Daily Report -->
                     <Border Grid.Column="0" Style="{StaticResource CardStyle}" Margin="0,0,16,0">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*"/>
-                            </Grid.RowDefinitions>
-
-                            <!-- Header -->
-                            <Grid Margin="0,0,0,20">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="General Statistics" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}"/>
-                                    <Border Background="{StaticResource AccentLightBrush}" CornerRadius="12" Padding="8,4" Margin="10,0,0,0" VerticalAlignment="Center">
-                                        <TextBlock Text="+8% Improve" FontSize="11" Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold"/>
-                                    </Border>
-                                </StackPanel>
-                            </Grid>
-
-                            <!-- Content: List + Stacked Bar -->
-                            <Grid Grid.Row="1">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="2*"/> <!-- List -->
-                                    <ColumnDefinition Width="1*"/> <!-- Chart -->
-                                </Grid.ColumnDefinitions>
-
-                                <!-- App List -->
-                                <StackPanel x:Name="AppListPanel" VerticalAlignment="Center"/>
-
-                            <!-- Stacked Bar Visual -->
-                                <Border Grid.Column="1" Background="#F3F4F6" CornerRadius="12" Margin="10,0,0,0" Padding="5">
-                                    <Grid x:Name="StackedBarContainer">
-                                        <Grid.RowDefinitions>
-                                            <!-- Dynamic rows will be added here in code-behind -->
-                                        </Grid.RowDefinitions>
-                                    </Grid>
-                                </Border>
-                            </Grid>
-                        </Grid>
-                    </Border>
-
-                    <!-- COL 2: Daily Report -->
-                    <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="0,0,16,0">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>   <!-- Header -->
@@ -314,11 +345,11 @@
                             <!-- Header -->
                             <Grid Grid.Row="0" Margin="0,0,0,20">
                                 <StackPanel>
-                                    <TextBlock Text="Activity Report" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}"/>
-                                    <TextBlock x:Name="TxtReportSubtitle" Text="Last 7 Days" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+                                    <TextBlock Text="Activity Report" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                    <TextBlock x:Name="TxtReportSubtitle" Text="Last 7 Days" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
                                 </StackPanel>
-                                <Border x:Name="ViewModeBadge" Background="{StaticResource AccentLightBrush}" CornerRadius="12" HorizontalAlignment="Right" Padding="12,6">
-                                    <TextBlock Text="Weekly View" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
+                                <Border x:Name="ViewModeBadge" Background="{DynamicResource AccentLightBrush}" CornerRadius="12" HorizontalAlignment="Right" Padding="12,6">
+                                    <TextBlock Text="Weekly View" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
                                 </Border>
                             </Grid>
 
@@ -338,15 +369,16 @@
                         </Grid>
                     </Border>
 
-                    <!-- COL 3: Quick Stats -->
-                    <Grid Grid.Column="2">
+                    <!-- COL 2: Quick Stats & App Usage -->
+                    <Grid Grid.Column="1">
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/> <!-- Streak -->
+                            <RowDefinition Height="Auto"/> <!-- Active Time -->
+                            <RowDefinition Height="*"/>    <!-- Top Apps -->
                         </Grid.RowDefinitions>
 
-                        <!-- Streak Widget (Moved here) -->
-                        <Border Grid.Row="0" Background="White" CornerRadius="16" Margin="0,0,0,16" Padding="16">
+                        <!-- Streak Widget -->
+                        <Border Grid.Row="0" Background="{DynamicResource CardBrush}" CornerRadius="16" Margin="0,0,0,16" Padding="16">
                             <Border.Effect>
                                 <DropShadowEffect BlurRadius="15" ShadowDepth="4" Opacity="0.08" Color="#000000"/>
                             </Border.Effect>
@@ -358,19 +390,17 @@
                                 </Grid.ColumnDefinitions>
 
                                 <!-- Flame Icon -->
-                                <TextBlock Text="🔥" FontSize="48" VerticalAlignment="Top" Margin="-4,-8,12,0" Foreground="#DC2626"/> 
+                                <TextBlock Text="🔥" FontSize="48" VerticalAlignment="Center" Margin="-4,0,12,0" Foreground="#DC2626"/> 
                                 
                                 <StackPanel Grid.Column="1">
                                     <!-- Title -->
                                     <TextBlock TextWrapping="Wrap" LineHeight="20">
-                                        <Run x:Name="TxtStreakCount" Text="0" FontWeight="Bold" FontSize="15" Foreground="#1F2937"/>
-                                        <Run Text=" days streak." FontWeight="Bold" FontSize="15" Foreground="#1F2937"/>
-                                        <LineBreak/>
-                                        <Run x:Name="TxtStreakMessage" Text="Keep it up!" FontSize="13" Foreground="#4B5563"/>
+                                        <Run x:Name="TxtStreakCount" Text="0" FontWeight="Bold" FontSize="15" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                        <Run Text=" days streak." FontWeight="Bold" FontSize="15" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                     </TextBlock>
 
                                     <!-- Days Row -->
-                                    <Border Background="#F3F4F6" CornerRadius="8" Padding="8,8" Margin="0,12,0,0">
+                                    <Border Background="{DynamicResource BgBrush}" CornerRadius="8" Padding="8,8" Margin="0,12,0,0">
                                          <Grid x:Name="StreakDaysGrid">
                                              <!-- Populated in Code Behind -->
                                          </Grid>
@@ -379,16 +409,37 @@
                             </Grid>
                         </Border>
 
-                        <!-- Active Time (Moved Down) -->
-                        <Border Grid.Row="1" Style="{StaticResource CardStyle}" Margin="0,0,0,8" VerticalAlignment="Top">
+                        <!-- Active Time -->
+                        <Border Grid.Row="1" Style="{StaticResource CardStyle}" Margin="0,0,0,16">
                             <StackPanel VerticalAlignment="Center">
-                                 <TextBlock Text="Total Active Time" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"/>
-                                 <TextBlock x:Name="TxtActiveTime" Text="0h 0m" FontSize="32" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,5,0,0"/>
+                                 <TextBlock Text="Total Active Time" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"/>
+                                 <TextBlock x:Name="TxtActiveTime" Text="0h 0m" FontSize="32" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,5,0,0"/>
                                  <Grid Margin="0,15,0,0">
-                                     <Border Background="#E5E7EB" CornerRadius="4" Height="8"/>
-                                     <Border Background="{StaticResource AccentBrush}" CornerRadius="4" Height="8" HorizontalAlignment="Left" Width="150"/>
+                                     <Border Background="{DynamicResource BgBrush}" CornerRadius="4" Height="8"/>
+                                     <Border Background="{DynamicResource AccentBrush}" CornerRadius="4" Height="8" HorizontalAlignment="Left" Width="150"/>
                                  </Grid>
                             </StackPanel>
+                        </Border>
+
+                        <!-- Top Apps Widget (New) -->
+                        <Border Grid.Row="2" Style="{StaticResource CardStyle}">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                
+                                <TextBlock Text="Most Used Apps" FontWeight="SemiBold" FontSize="15" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,16"/>
+                                
+                                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,16,0">
+                                    <ScrollViewer.Resources>
+                                        <Style TargetType="{x:Type ScrollBar}" BasedOn="{StaticResource DarkScrollBarStyle}"/>
+                                    </ScrollViewer.Resources>
+                                    <StackPanel x:Name="AppUsageListContainer">
+                                        <!-- Items filled by C# -->
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Grid>
                         </Border>
                     </Grid>
                 </Grid>

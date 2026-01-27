@@ -41,6 +41,9 @@ public class AppBootstrap : IDisposable
     // Tray
     private readonly TrayIconManager _trayIconManager;
 
+    // Theme
+    private readonly ThemeManager _themeManager;
+
     private bool _isRunning;
     private bool _disposed;
 
@@ -91,6 +94,10 @@ public class AppBootstrap : IDisposable
         
         // Initialize streak service
         _streakService = new StreakService(_repository);
+
+        // Initialize theme manager
+        _themeManager = new ThemeManager();
+        _themeManager.ApplyTheme(ThemeType.Light);
 
         // Initialize tray
         _trayIconManager = new TrayIconManager();
@@ -281,9 +288,17 @@ public class AppBootstrap : IDisposable
 
     private void ShowStats()
     {
+        // Ensure WPF Application exists (required for resource lookup)
+        if (System.Windows.Application.Current == null)
+        {
+            new System.Windows.Application();
+            // Apply theme after WPF Application is created
+            _themeManager.ApplyTheme(_themeManager.CurrentTheme);
+        }
+        
         if (_dashboardWindow == null || !_dashboardWindow.IsLoaded)
         {
-            _dashboardWindow = new DashboardWindow(_aggregationService, _systemTimeService, _trayIconManager!, _focusService, _appBlockerService, _foregroundTracker, _streakService);
+            _dashboardWindow = new DashboardWindow(_aggregationService, _systemTimeService, _trayIconManager!, _focusService, _appBlockerService, _foregroundTracker, _themeManager, _streakService);
             _dashboardWindow.Closed += (s, e) => _dashboardWindow = null;
         }
 

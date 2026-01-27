@@ -23,17 +23,22 @@ public partial class DashboardWindow : Window
     private readonly AppBlockerService _appBlockerService;
     private readonly Tracking.ForegroundAppTracker _foregroundTracker;
     private readonly StreakService _streakService;
+    private readonly ThemeManager _themeManager;
 
-    // Tempo Theme Colors
-    private readonly SolidColorBrush[] _appColors = new[]
-    {
-        (SolidColorBrush)new BrushConverter().ConvertFrom("#9333EA")!, // Purple (Top 1)
-        (SolidColorBrush)new BrushConverter().ConvertFrom("#A855F7")!, // Light Purple (Top 2)
-        (SolidColorBrush)new BrushConverter().ConvertFrom("#C084FC")!, // Lighter Purple (Top 3)
-        (SolidColorBrush)new BrushConverter().ConvertFrom("#E9D5FF")!, // Lavender (Top 4)
-    };
+    // Tempo Theme Colors - Now retrieved dynamically or kept for graph logic
+    // We will use DynamicResource in XAML, but for code-behind graph we might need access.
+    // However, the Graph bars use specific colors. We can keep these or update them.
+    // For now, let's keep them but maybe update to use theme colors if needed later.
 
-    public DashboardWindow(AggregationService aggregationService, SystemTimeService systemTimeService, TrayIconManager trayIconManager, FocusService focusService, AppBlockerService appBlockerService, Tracking.ForegroundAppTracker foregroundTracker, StreakService streakService)
+    public DashboardWindow(
+        AggregationService aggregationService, 
+        SystemTimeService systemTimeService, 
+        TrayIconManager trayIconManager, 
+        FocusService focusService, 
+        AppBlockerService appBlockerService, 
+        Tracking.ForegroundAppTracker foregroundTracker, 
+        ThemeManager themeManager,
+        StreakService streakService)
     {
         InitializeComponent();
         
@@ -43,6 +48,7 @@ public partial class DashboardWindow : Window
         _focusService = focusService;
         _appBlockerService = appBlockerService;
         _foregroundTracker = foregroundTracker;
+        _themeManager = themeManager;
         _streakService = streakService;
         
         // Subscribe to streak updates
@@ -74,10 +80,7 @@ public partial class DashboardWindow : Window
         // 1. Quick Stats (Right Column)
         UpdateQuickStats();
 
-        // 2. General Statistics (Left Column)
-        UpdateGeneralStats();
-
-        // 3. Daily Report (Center Column)
+        // 2. Daily Report (Center Column)
         UpdateDailyReport();
     }
 
@@ -85,6 +88,10 @@ public partial class DashboardWindow : Window
     {
         var totalScreenTime = _aggregationService.GetTotalScreenTimeToday();
         TxtActiveTime.Text = FormatTime(totalScreenTime);
+        
+        // Day labels are updated in UpdateStreakDisplay()
+        UpdateGeneralStats();
+        UpdateAppUsageList();
         
         // Update streak display
         UpdateStreakDisplay();
@@ -94,8 +101,6 @@ public partial class DashboardWindow : Window
     {
         var streak = _streakService.CurrentStreak;
         TxtStreakCount.Text = streak.ToString();
-        // TxtStreakMessage is a Run
-        TxtStreakMessage.Text = _streakService.GetStreakMessage();
         
         // Populate visual bubbles (Current Week: Mon-Sun)
         StreakDaysGrid.Children.Clear();
@@ -152,9 +157,12 @@ public partial class DashboardWindow : Window
                 CornerRadius = new CornerRadius(11),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Background = isCompleted 
-                    ? new SolidColorBrush(Color.FromRgb(239, 68, 68)) // Red-500
-                    : new SolidColorBrush(Color.FromRgb(229, 231, 235)) // Gray-200
+                    ? (Brush)FindResource("SuccessBrush") // Use Success instead of Red for positive streak? Or stick to Fire Red?
+                    : (Brush)FindResource("BorderBrush") 
             };
+            
+            // If we want Red for streak, we should add Fire/Danger brush
+            if (isCompleted) bubble.Background = (Brush)FindResource("DangerBrush"); // Fire is usually red/orange
             
             if (isCompleted)
             {
@@ -179,81 +187,7 @@ public partial class DashboardWindow : Window
 
     private void UpdateGeneralStats()
     {
-        // Clear previous
-        AppListPanel.Children.Clear();
-        StackedBarContainer.RowDefinitions.Clear();
-        StackedBarContainer.Children.Clear();
-
-        // Get Top 4 Apps
-        var topApps = _aggregationService.GetTopAppsToday(4);
-        var totalTime = _aggregationService.GetTotalScreenTimeToday().TotalSeconds;
-        
-        if (totalTime <= 0) totalTime = 1; // Avoid divide by zero
-
-        // 1. Populate List (Standard Order: Big -> Small)
-        for (int i = 0; i < topApps.Count; i++)
-        {
-            var app = topApps[i];
-            var color = _appColors[i % _appColors.Length];
-            AppListPanel.Children.Add(CreateAppListItem(app, color));
-        }
-
-        // 2. Populate Stacked Bar (Reverse Order: Small -> Big, so Big is at Bottom)
-        // We render Top-to-Bottom, so we want Smallest first.
-        
-        var reversedApps = topApps.AsEnumerable().Reverse().ToList();
-        
-        // If there are fewer than 4 apps, we might need to handle empty space if we want full height?
-        // But logic relies on Star sizing, so they will fill the space proportionally.
-        // We need to account for "Other" if typical usage implies 100%. 
-        // For visual "stacked card" style, usually we just stack what we have.
-        
-        for (int i = 0; i < reversedApps.Count; i++)
-        {
-            var app = reversedApps[i];
-            // Find original index to get correct color
-            int originalIndex = topApps.IndexOf(app);
-            var color = _appColors[originalIndex % _appColors.Length];
-            
-            var percentage = app.TotalTime.TotalSeconds / totalTime;
-            
-            // Add Row
-            var rowDef = new RowDefinition { Height = new GridLength(percentage, GridUnitType.Star) };
-            StackedBarContainer.RowDefinitions.Add(rowDef);
-
-            // Determine Corner Radius
-            // User requested curves on edges of each tile -> All Uniform
-            
-            var radius = new CornerRadius(12); // Uniform rounding for all individual cards
-
-            var barSegmentBorder = new Border
-            {
-                Background = color,
-                CornerRadius = radius,
-                Margin = new Thickness(0, 2, 0, 2) // Gap between tiles
-            };
-
-            // If it's the bottom tile (Biggest, i == count-1), add Speckles
-            if (i == reversedApps.Count - 1)
-            {
-                var grid = new Grid();
-                grid.Children.Add(CreateSpeckleCanvas());
-                barSegmentBorder.Child = grid;
-            }
-            
-            Grid.SetRow(barSegmentBorder, i);
-            StackedBarContainer.Children.Add(barSegmentBorder);
-        }
-        
-        // Note: If "Other" exists (total < 100%), we might want to add it. 
-        // Logic for "Other" would be:
-        // If we want "Other" to be at the TOP (Smallest?), we add it first.
-        // Or if "Other" is implicit transparent space?
-        // Visual style implies full card. User probably expects the apps to fill the bar or "Other" to be a segment.
-        // For now, let's just stack the top apps. If 100% is not reached, the Grid/Star sizing will expand them to fill the container?
-        // YES. WPF Grid with all Star rows will normalize to 100% of available space.
-        // So 50%, 20%, 10% (Sum 80%) will be rendered as 50/80, 20/80, 10/80.
-        // This effectively hides "Other" and expands Top Apps. This looks cleaner for this design.
+        /* Widget removed from UI */
     }
 
     private Canvas CreateSpeckleCanvas()
@@ -296,53 +230,138 @@ public partial class DashboardWindow : Window
         return canvas;
     }
 
-    private UIElement CreateAppListItem(AppUsageStats app, Brush color)
+    private void UpdateAppUsageList()
     {
-        var grid = new Grid { Margin = new Thickness(0, 0, 0, 15) };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(20) }); // Dot
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // Name
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // Time
+        if (AppUsageListContainer == null) return;
 
-        // Dot
-        var dot = new Border
+        AppUsageListContainer.Children.Clear();
+
+        var stats = _aggregationService.GetTodayStats();
+        var totalTime = _aggregationService.GetTotalScreenTimeToday();
+        var totalSeconds = totalTime.TotalSeconds;
+
+        if (totalSeconds <= 0) totalSeconds = 1; // Avoid division by zero
+
+        // Sort by time desc
+        var topApps = stats.OrderByDescending(s => s.TotalTime).Take(8).ToList(); // Show top 8
+
+        foreach (var app in topApps)
         {
-            Width = 10, Height = 10,
-            CornerRadius = new CornerRadius(5),
-            BorderThickness = new Thickness(2),
-            BorderBrush = color,
-            Background = Brushes.Transparent,
-            HorizontalAlignment = HorizontalAlignment.Left
+            var item = CreateAppUsageListItem(app, totalSeconds);
+            AppUsageListContainer.Children.Add(item);
+        }
+    }
+
+    private UIElement CreateAppUsageListItem(AppUsageStats app, double totalSeconds)
+    {
+        double percentage = (app.TotalTime.TotalSeconds / totalSeconds) * 100;
+        if (percentage > 100) percentage = 100;
+        if (percentage < 0) percentage = 0;
+
+        // Container Grid
+        var grid = new Grid { Margin = new Thickness(0, 0, 0, 12) };
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Text Row
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Bar Row
+
+        // 1. Text Row: "Name | Time"
+        var textStack = new StackPanel 
+        { 
+            Orientation = System.Windows.Controls.Orientation.Horizontal,
+            Margin = new Thickness(0, 0, 0, 6)
         };
 
-        // Name
         var nameTxt = new TextBlock
         {
-            Text = app.AppName.Replace(".exe", "", StringComparison.OrdinalIgnoreCase), // Clean name
-            Foreground = new SolidColorBrush(Color.FromRgb(107, 114, 128)), // Gray-500
-            FontSize = 14,
+            Text = app.AppName.Replace(".exe", "", StringComparison.OrdinalIgnoreCase),
+            Foreground = (Brush)FindResource("TextPrimaryBrush"), 
+            FontSize = 13,
+            FontWeight = FontWeights.Medium,
             TextTrimming = TextTrimming.CharacterEllipsis,
-            Margin = new Thickness(5, 0, 10, 0),
-            VerticalAlignment = VerticalAlignment.Center
+            MaxWidth = 140
         };
 
-        // Time
-        var timeTxt = new TextBlock
+        var separatorTxt = new TextBlock
+        {
+            Text = " | ",
+            Foreground = (Brush)FindResource("TextSecondaryBrush"),
+            FontSize = 13,
+            Margin = new Thickness(4, 0, 4, 0)
+        };
+
+         var timeTxt = new TextBlock
         {
             Text = FormatTimeCompact(app.TotalTime),
-            Foreground = new SolidColorBrush(Color.FromRgb(31, 41, 55)), // Gray-800
-            FontWeight = FontWeights.SemiBold,
-            VerticalAlignment = VerticalAlignment.Center
+            Foreground = (Brush)FindResource("TextSecondaryBrush"),
+            FontSize = 13
         };
 
-        Grid.SetColumn(dot, 0);
-        Grid.SetColumn(nameTxt, 1);
-        Grid.SetColumn(timeTxt, 2);
+        textStack.Children.Add(nameTxt);
+        textStack.Children.Add(separatorTxt);
+        textStack.Children.Add(timeTxt);
 
-        grid.Children.Add(dot);
-        grid.Children.Add(nameTxt);
-        grid.Children.Add(timeTxt);
+        Grid.SetRow(textStack, 0);
+        grid.Children.Add(textStack);
+
+        // 2. Progress Bar
+        var barGrid = new Grid { Height = 6, ClipToBounds = true }; 
+        var barCornerRadius = new CornerRadius(3);
+        
+        // Background track
+        var track = new Border { Background = (Brush)FindResource("BorderBrush"), CornerRadius = barCornerRadius, Opacity = 0.5 };
+        
+        // Fill
+        var fillDef = new ColumnDefinition { Width = new GridLength(percentage, GridUnitType.Star) };
+        var emptyDef = new ColumnDefinition { Width = new GridLength(100 - percentage, GridUnitType.Star) };
+        
+        var fillGrid = new Grid();
+        fillGrid.ColumnDefinitions.Add(fillDef);
+        fillGrid.ColumnDefinitions.Add(emptyDef);
+        
+        var fill = new Border 
+        { 
+            Background = (Brush)FindResource("AccentBrush"), 
+            CornerRadius = barCornerRadius
+        };
+        Grid.SetColumn(fill, 0);
+        
+        fillGrid.Children.Add(fill);
+        
+        barGrid.Children.Add(track);
+        barGrid.Children.Add(fillGrid);
+
+        Grid.SetRow(barGrid, 1);
+        grid.Children.Add(barGrid);
 
         return grid;
+    }
+
+    private void ThemeButton_Click(object sender, RoutedEventArgs e)
+    {
+        _themeManager.ToggleTheme();
+        UpdateAllDynamicResources();
+    }
+
+    private void UpdateAllDynamicResources()
+    {
+        // WPF DynamicResource usually handles this automatically if the resource dictionary is replaced at the App level.
+        // However, since we are doing manual merging in ThemeManager, let's verify if we need to force update.
+        // If we replaced Application.Current.Resources, it should propagate.
+        // But if it doesn't, we might need to invalidate visual tree or re-apply.
+        // Let's assume automatic propagation for now. 
+        // We might want to update the icon of the button though.
+        
+        UpdateThemeIcon();
+        
+        // Re-render graphs if they use hardcoded brushes that need to switch
+        RefreshData();
+    }
+
+    private void UpdateThemeIcon()
+    {
+         if (BtnThemeTheme?.Content is TextBlock tb)
+         {
+             tb.Text = _themeManager.CurrentTheme == ThemeType.Light ? "🌙" : "☀️";
+         }
     }
 
     private void UpdateDailyReport()
@@ -393,18 +412,28 @@ public partial class DashboardWindow : Window
 
             // Create gradient brush for active bars - Tempo theme
             Brush barBrush;
+            var accentColor = (Color)FindResource("AccentColor");
+            var accentLightColor = (Color)FindResource("AccentLightColor"); // Or use a darker shade for gradient end?
+            
+            // Actually, let's use the define BarActiveColorStart/End if available, or just derive
+            // For now, let's just use the AccentColor for simplicity or simple gradient
+            // But to keep the "Wow" factor, let's use the gradient.
+            // We can treat AccentColor as Start and a slightly modified version as End, or just use Solid for now to be safe with switching.
+            // Or better: Let's use the resource brushes directly if possible.
+            // But we need a gradient.
+            
             if (isToday)
             {
                 barBrush = new LinearGradientBrush(
-                    Color.FromRgb(147, 51, 234), // Purple-600
-                    Color.FromRgb(126, 34, 206), // Purple-700
+                    (Color)FindResource("BarActiveColorStart"), 
+                    (Color)FindResource("BarActiveColorEnd"), 
                     90);
             }
             else
             {
                 barBrush = new LinearGradientBrush(
-                    Color.FromRgb(233, 213, 255), // Purple-200
-                    Color.FromRgb(216, 180, 254), // Purple-300
+                    (Color)FindResource("BarInactiveColorStart"), 
+                    (Color)FindResource("BarInactiveColorEnd"), 
                     90);
             }
 
@@ -433,7 +462,7 @@ public partial class DashboardWindow : Window
             var dayLabel = new TextBlock
             {
                 Text = date.ToString("ddd"), // Mon, Tue...
-                Foreground = isToday ? new SolidColorBrush(Color.FromRgb(147, 51, 234)) : new SolidColorBrush(Color.FromRgb(107, 114, 128)), // Purple or Gray
+                Foreground = isToday ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("TextSecondaryBrush"),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Margin = new Thickness(0, 8, 0, 0),
                 FontSize = 12,
@@ -570,10 +599,10 @@ public partial class DashboardWindow : Window
             // Create gradient brush for active bars - Tempo theme
             Brush barBrush = hourlyMinutes[h] > 0 
                 ? new LinearGradientBrush(
-                    Color.FromRgb(147, 51, 234), // Purple-600
-                    Color.FromRgb(126, 34, 206), // Purple-700
+                    (Color)FindResource("BarActiveColorStart"),
+                    (Color)FindResource("BarActiveColorEnd"),
                     90)
-                : new SolidColorBrush(Color.FromRgb(243, 244, 246)); // Gray-100;
+                : (Brush)FindResource("BgBrush"); // inactive
 
             var bar = new Border
             {

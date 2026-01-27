@@ -1,0 +1,36 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Tempo Theme Colors (Dark) -->
+    <Color x:Key="BgColor">#111827</Color> <!-- Gray-900 -->
+    <Color x:Key="CardColor">#1F2937</Color> <!-- Gray-800 -->
+    <Color x:Key="SidebarBgColor">#1F2937</Color> <!-- Gray-800 -->
+    
+    <Color x:Key="PrimaryTextColor">#F9FAFB</Color> <!-- Gray-50 -->
+    <Color x:Key="SecondaryTextColor">#9CA3AF</Color> <!-- Gray-400 -->
+    <Color x:Key="AccentColor">#A855F7</Color> <!-- Purple-500 -->
+    <Color x:Key="AccentLightColor">#581C87</Color> <!-- Purple-900 -->
+    
+    <Color x:Key="SuccessColor">#4ADE80</Color> <!-- Green-400 -->
+    <Color x:Key="WarningColor">#FBBF24</Color> <!-- Amber-400 -->
+    <Color x:Key="DangerColor">#F87171</Color> <!-- Red-400 -->
+    <Color x:Key="BorderColor">#374151</Color> <!-- Gray-700 -->
+
+    <SolidColorBrush x:Key="BgBrush" Color="{StaticResource BgColor}"/>
+    <SolidColorBrush x:Key="CardBrush" Color="{StaticResource CardColor}"/>
+    <SolidColorBrush x:Key="SidebarBgBrush" Color="{StaticResource SidebarBgColor}"/>
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource PrimaryTextColor}"/>
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource SecondaryTextColor}"/>
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}"/>
+    <SolidColorBrush x:Key="AccentLightBrush" Color="{StaticResource AccentLightColor}"/>
+    <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource SuccessColor}"/>
+    <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource WarningColor}"/>
+    <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource DangerColor}"/>
+    <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource BorderColor}"/>
+
+    <!-- Graph Colors -->
+    <Color x:Key="BarActiveColorStart">#A855F7</Color>
+    <Color x:Key="BarActiveColorEnd">#9333EA</Color>
+    <Color x:Key="BarInactiveColorStart">#581C87</Color>
+    <Color x:Key="BarInactiveColorEnd">#4C1D95</Color>
+
+</ResourceDictionary>
