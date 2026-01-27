@@ -27,6 +27,11 @@ public class TrackingState
     public string? CurrentWebsiteDomain { get; private set; }
 
     /// <summary>
+    /// Full path to the executable of the current app.
+    /// </summary>
+    public string? CurrentAppPath { get; private set; }
+
+    /// <summary>
     /// Timestamp when the current app became foreground.
     /// </summary>
     public DateTime SessionStartTime { get; private set; }
@@ -49,7 +54,7 @@ public class TrackingState
     /// <summary>
     /// Starts tracking a new foreground application.
     /// </summary>
-    public UsageSession? StartNewSession(string appName, int processId, string? windowTitle, string? websiteDomain, DateTime timestamp)
+    public UsageSession? StartNewSession(string appName, int processId, string? windowTitle, string? websiteDomain, DateTime timestamp, string? appPath)
     {
         UsageSession? completedSession = null;
 
@@ -63,6 +68,7 @@ public class TrackingState
         CurrentProcessId = processId;
         CurrentWindowTitle = windowTitle;
         CurrentWebsiteDomain = websiteDomain;
+        CurrentAppPath = appPath;
         SessionStartTime = timestamp;
         IsTracking = true;
 
@@ -85,7 +91,8 @@ public class TrackingState
             CurrentWindowTitle,
             SessionStartTime,
             endTime,
-            CurrentWebsiteDomain
+            CurrentWebsiteDomain,
+            CurrentAppPath
         );
 
         IsTracking = false;
@@ -93,6 +100,7 @@ public class TrackingState
         CurrentProcessId = 0;
         CurrentWindowTitle = null;
         CurrentWebsiteDomain = null;
+        CurrentAppPath = null;
 
         return session;
     }

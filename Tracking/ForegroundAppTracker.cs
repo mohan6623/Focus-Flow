@@ -9,14 +9,16 @@ namespace ScreenTimeTracker.Tracking;
 public class ForegroundChangedEventArgs : EventArgs
 {
     public string? AppName { get; }
+    public string? AppPath { get; }
     public int ProcessId { get; }
     public string? WindowTitle { get; }
     public string? WebsiteDomain { get; }
     public DateTime Timestamp { get; }
 
-    public ForegroundChangedEventArgs(string? appName, int processId, string? windowTitle, string? websiteDomain, DateTime timestamp)
+    public ForegroundChangedEventArgs(string? appName, string? appPath, int processId, string? windowTitle, string? websiteDomain, DateTime timestamp)
     {
         AppName = appName;
+        AppPath = appPath;
         ProcessId = processId;
         WindowTitle = windowTitle;
         WebsiteDomain = websiteDomain;
@@ -182,6 +184,9 @@ public class ForegroundAppTracker : IDisposable
 
     private void RaiseForegroundChanged(string appName, int processId, string? windowTitle, IntPtr windowHandle)
     {
+        // Get the executable path
+        var appPath = _processResolver.GetExecutablePath(processId);
+
         // Check if this is a browser and extract URL
         string? websiteDomain = null;
         if (_browserTabResolver.IsBrowser(appName))
@@ -202,7 +207,7 @@ public class ForegroundAppTracker : IDisposable
             }
         }
 
-        var args = new ForegroundChangedEventArgs(appName, processId, windowTitle, websiteDomain, DateTime.Now);
+        var args = new ForegroundChangedEventArgs(appName, appPath, processId, windowTitle, websiteDomain, DateTime.Now);
         
         try
         {

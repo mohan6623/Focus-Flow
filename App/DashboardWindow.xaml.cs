@@ -77,24 +77,23 @@ public partial class DashboardWindow : Window
 
     private void RefreshData()
     {
-        // 1. Quick Stats (Right Column)
-        UpdateQuickStats();
+        // 1. Quick Stats (Right Column) - Now consolidated into UpdateStats
+        UpdateStats();
 
         // 2. Daily Report (Center Column)
         UpdateDailyReport();
     }
 
-    private void UpdateQuickStats()
+    private async void UpdateStats()
     {
+        if (System.Windows.Application.Current == null) return;
+
         var totalScreenTime = _aggregationService.GetTotalScreenTimeToday();
         TxtActiveTime.Text = FormatTime(totalScreenTime);
-        
-        // Day labels are updated in UpdateStreakDisplay()
-        UpdateGeneralStats();
-        UpdateAppUsageList();
-        
-        // Update streak display
+
         UpdateStreakDisplay();
+        // UpdateGeneralStats(); // Disabled widget
+        await UpdateAppUsageList();
     }
     
     private void UpdateStreakDisplay()
@@ -230,7 +229,7 @@ public partial class DashboardWindow : Window
         return canvas;
     }
 
-    private void UpdateAppUsageList()
+    private async Task UpdateAppUsageList()
     {
         if (AppUsageListContainer == null) return;
 
@@ -247,28 +246,46 @@ public partial class DashboardWindow : Window
 
         foreach (var app in topApps)
         {
-            var item = CreateAppUsageListItem(app, totalSeconds);
+            var item = await CreateAppUsageListItem(app, totalSeconds);
             AppUsageListContainer.Children.Add(item);
         }
     }
 
-    private UIElement CreateAppUsageListItem(AppUsageStats app, double totalSeconds)
+    private async Task<Grid> CreateAppUsageListItem(AppUsageStats app, double totalSeconds)
     {
         double percentage = (app.TotalTime.TotalSeconds / totalSeconds) * 100;
-        if (percentage > 100) percentage = 100;
-        if (percentage < 0) percentage = 0;
+        if (percentage < 1) percentage = 1; // Minimum width
+        //if (percentage < 0) percentage = 0; // This line was replaced by the above, assuming percentage won't be negative.
 
         // Container Grid
         var grid = new Grid { Margin = new Thickness(0, 0, 0, 12) };
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Text Row
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Bar Row
 
-        // 1. Text Row: "Name | Time"
+        // 1. Text Row: "[Icon] Name | Time"
         var textStack = new StackPanel 
         { 
             Orientation = System.Windows.Controls.Orientation.Horizontal,
             Margin = new Thickness(0, 0, 0, 6)
         };
+
+        // App Icon (Rounded)
+        var icon = await Services.IconHelper.GetIconAsync(app.AppPath, app.AppName, app.WebsiteDomain);
+        var iconBorder = new Border
+        {
+            Width = 22,
+            Height = 22,
+            CornerRadius = new CornerRadius(5), // Visible rounded corners
+            Margin = new Thickness(0, 0, 8, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Background = new ImageBrush 
+            { 
+                ImageSource = icon, 
+                Stretch = Stretch.Uniform 
+            }
+        };
+        RenderOptions.SetBitmapScalingMode(iconBorder, BitmapScalingMode.HighQuality);
+        textStack.Children.Add(iconBorder);
 
         var nameTxt = new TextBlock
         {
@@ -277,7 +294,8 @@ public partial class DashboardWindow : Window
             FontSize = 13,
             FontWeight = FontWeights.Medium,
             TextTrimming = TextTrimming.CharacterEllipsis,
-            MaxWidth = 140
+            MaxWidth = 140,
+            VerticalAlignment = VerticalAlignment.Center
         };
 
         var separatorTxt = new TextBlock
@@ -285,14 +303,16 @@ public partial class DashboardWindow : Window
             Text = " | ",
             Foreground = (Brush)FindResource("TextSecondaryBrush"),
             FontSize = 13,
-            Margin = new Thickness(4, 0, 4, 0)
+            Margin = new Thickness(4, 0, 4, 0),
+            VerticalAlignment = VerticalAlignment.Center
         };
 
          var timeTxt = new TextBlock
         {
             Text = FormatTimeCompact(app.TotalTime),
             Foreground = (Brush)FindResource("TextSecondaryBrush"),
-            FontSize = 13
+            FontSize = 13,
+            VerticalAlignment = VerticalAlignment.Center
         };
 
         textStack.Children.Add(nameTxt);

@@ -12,6 +12,16 @@ public class AppUsageStats
     public string AppName { get; }
 
     /// <summary>
+    /// Full path to the executable file (may be null for old data).
+    /// </summary>
+    public string? AppPath { get; private set; }
+
+    /// <summary>
+    /// Website domain if this is a web app (e.g., "youtube.com").
+    /// </summary>
+    public string? WebsiteDomain { get; private set; }
+
+    /// <summary>
     /// The date these stats are for.
     /// </summary>
     public DateOnly Date { get; }
@@ -65,6 +75,18 @@ public class AppUsageStats
         TotalTime += session.Duration;
         SessionCount++;
 
+        // Capture path from first session that has it
+        if (string.IsNullOrEmpty(AppPath) && !string.IsNullOrEmpty(session.AppPath))
+        {
+            AppPath = session.AppPath;
+        }
+
+        // Capture domain from first session that has it
+        if (string.IsNullOrEmpty(WebsiteDomain) && !string.IsNullOrEmpty(session.WebsiteDomain))
+        {
+            WebsiteDomain = session.WebsiteDomain;
+        }
+
         if (session.StartTime < FirstUsed)
         {
             FirstUsed = session.StartTime;
@@ -79,12 +101,14 @@ public class AppUsageStats
     /// <summary>
     /// Restores stats from database values (used when loading persisted data).
     /// </summary>
-    public void SetFromDatabase(TimeSpan totalTime, int sessionCount, DateTime firstUsed, DateTime lastUsed)
+    public void SetFromDatabase(TimeSpan totalTime, int sessionCount, DateTime firstUsed, DateTime lastUsed, string? appPath = null, string? websiteDomain = null)
     {
         TotalTime = totalTime;
         SessionCount = sessionCount;
         FirstUsed = firstUsed;
         LastUsed = lastUsed;
+        AppPath = appPath;
+        WebsiteDomain = websiteDomain;
     }
 
     /// <summary>
@@ -99,6 +123,18 @@ public class AppUsageStats
 
         TotalTime += other.TotalTime;
         SessionCount += other.SessionCount;
+
+        // Preserve path if we don't have one
+        if (string.IsNullOrEmpty(AppPath) && !string.IsNullOrEmpty(other.AppPath))
+        {
+            AppPath = other.AppPath;
+        }
+
+        // Preserve domain if we don't have one
+        if (string.IsNullOrEmpty(WebsiteDomain) && !string.IsNullOrEmpty(other.WebsiteDomain))
+        {
+            WebsiteDomain = other.WebsiteDomain;
+        }
 
         if (other.FirstUsed < FirstUsed)
         {

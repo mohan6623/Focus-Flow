@@ -64,7 +64,8 @@ public class SessionTracker
                 e.ProcessId, 
                 e.WindowTitle,
                 e.WebsiteDomain,
-                e.Timestamp);
+                e.Timestamp,
+                e.AppPath);
 
             if (completedSession != null)
             {

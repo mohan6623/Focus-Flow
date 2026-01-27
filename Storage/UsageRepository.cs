@@ -93,6 +93,13 @@ public class UsageRepository : IDisposable
             ";
             command.ExecuteNonQuery();
 
+            // Migration: Add app_path column if it doesn't exist
+            RunMigration(connection, "ALTER TABLE app_usage ADD COLUMN app_path TEXT");
+            RunMigration(connection, "ALTER TABLE app_sessions ADD COLUMN app_path TEXT");
+
+            // Migration: Add website_domain column to app_usage if it doesn't exist
+            RunMigration(connection, "ALTER TABLE app_usage ADD COLUMN website_domain TEXT");
+
             _initialized = true;
             Logger.Info($"Database initialized at: {_databasePath}");
         }
@@ -118,14 +125,16 @@ public class UsageRepository : IDisposable
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                INSERT INTO app_usage (app_name, date, total_seconds, session_count, first_used, last_used, updated_at)
-                VALUES (@appName, @date, @totalSeconds, @sessionCount, @firstUsed, @lastUsed, @updatedAt)
+                INSERT INTO app_usage (app_name, date, total_seconds, session_count, first_used, last_used, updated_at, app_path, website_domain)
+                VALUES (@appName, @date, @totalSeconds, @sessionCount, @firstUsed, @lastUsed, @updatedAt, @appPath, @websiteDomain)
                 ON CONFLICT(app_name, date) DO UPDATE SET
                     total_seconds = @totalSeconds,
                     session_count = @sessionCount,
                     first_used = MIN(first_used, @firstUsed),
                     last_used = MAX(last_used, @lastUsed),
-                    updated_at = @updatedAt
+                    updated_at = @updatedAt,
+                    app_path = COALESCE(@appPath, app_path),
+                    website_domain = COALESCE(@websiteDomain, website_domain)
             ";
 
             command.Parameters.AddWithValue("@appName", stats.AppName);
@@ -135,6 +144,8 @@ public class UsageRepository : IDisposable
             command.Parameters.AddWithValue("@firstUsed", stats.FirstUsed.ToString("o"));
             command.Parameters.AddWithValue("@lastUsed", stats.LastUsed.ToString("o"));
             command.Parameters.AddWithValue("@updatedAt", DateTime.Now.ToString("o"));
+            command.Parameters.AddWithValue("@appPath", stats.AppPath ?? (object)DBNull.Value);
+            command.Parameters.AddWithValue("@websiteDomain", stats.WebsiteDomain ?? (object)DBNull.Value);
 
             command.ExecuteNonQuery();
         }
@@ -162,14 +173,16 @@ public class UsageRepository : IDisposable
             {
                 using var command = connection.CreateCommand();
                 command.CommandText = @"
-                    INSERT INTO app_usage (app_name, date, total_seconds, session_count, first_used, last_used, updated_at)
-                    VALUES (@appName, @date, @totalSeconds, @sessionCount, @firstUsed, @lastUsed, @updatedAt)
+                    INSERT INTO app_usage (app_name, date, total_seconds, session_count, first_used, last_used, updated_at, app_path, website_domain)
+                    VALUES (@appName, @date, @totalSeconds, @sessionCount, @firstUsed, @lastUsed, @updatedAt, @appPath, @websiteDomain)
                     ON CONFLICT(app_name, date) DO UPDATE SET
                         total_seconds = @totalSeconds,
                         session_count = @sessionCount,
                         first_used = MIN(first_used, @firstUsed),
                         last_used = MAX(last_used, @lastUsed),
-                        updated_at = @updatedAt
+                        updated_at = @updatedAt,
+                        app_path = COALESCE(@appPath, app_path),
+                        website_domain = COALESCE(@websiteDomain, website_domain)
                 ";
 
                 command.Parameters.AddWithValue("@appName", stats.AppName);
@@ -179,6 +192,8 @@ public class UsageRepository : IDisposable
                 command.Parameters.AddWithValue("@firstUsed", stats.FirstUsed.ToString("o"));
                 command.Parameters.AddWithValue("@lastUsed", stats.LastUsed.ToString("o"));
                 command.Parameters.AddWithValue("@updatedAt", DateTime.Now.ToString("o"));
+                command.Parameters.AddWithValue("@appPath", stats.AppPath ?? (object)DBNull.Value);
+                command.Parameters.AddWithValue("@websiteDomain", stats.WebsiteDomain ?? (object)DBNull.Value);
 
                 command.ExecuteNonQuery();
             }
@@ -207,7 +222,7 @@ public class UsageRepository : IDisposable
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                SELECT app_name, date, total_seconds, session_count, first_used, last_used
+                SELECT app_name, date, total_seconds, session_count, first_used, last_used, app_path, website_domain
                 FROM app_usage
                 WHERE date = @date
                 ORDER BY total_seconds DESC
@@ -222,6 +237,8 @@ public class UsageRepository : IDisposable
                 var sessionCount = reader.GetInt32(3);
                 var firstUsed = DateTime.Parse(reader.GetString(4));
                 var lastUsed = DateTime.Parse(reader.GetString(5));
+                var appPath = reader.IsDBNull(6) ? null : reader.GetString(6);
+                var websiteDomain = reader.IsDBNull(7) ? null : reader.GetString(7);
 
                 // Create stats and restore values directly
                 var stats = new AppUsageStats(appName, date);
@@ -229,7 +246,9 @@ public class UsageRepository : IDisposable
                     TimeSpan.FromSeconds(totalSeconds),
                     sessionCount,
                     firstUsed,
-                    lastUsed
+                    lastUsed,
+                    appPath,
+                    websiteDomain
                 );
 
                 results.Add(stats);
@@ -434,8 +453,8 @@ public class UsageRepository : IDisposable
             {
                 using var command = connection.CreateCommand();
                 command.CommandText = @"
-                    INSERT INTO app_sessions (app_name, start_time, end_time, duration_seconds, date, website_domain, created_at)
-                    VALUES (@appName, @startTime, @endTime, @duration, @date, @domain, @createdAt)
+                    INSERT INTO app_sessions (app_name, start_time, end_time, duration_seconds, date, website_domain, created_at, app_path)
+                    VALUES (@appName, @startTime, @endTime, @duration, @date, @domain, @createdAt, @appPath)
                 ";
                 command.Parameters.AddWithValue("@appName", session.AppName);
                 command.Parameters.AddWithValue("@startTime", session.StartTime.ToString("o"));
@@ -444,6 +463,7 @@ public class UsageRepository : IDisposable
                 command.Parameters.AddWithValue("@date", session.Date.ToString("yyyy-MM-dd"));
                 command.Parameters.AddWithValue("@domain", session.WebsiteDomain ?? (object)DBNull.Value);
                 command.Parameters.AddWithValue("@createdAt", DateTime.Now.ToString("o"));
+                command.Parameters.AddWithValue("@appPath", session.AppPath ?? (object)DBNull.Value);
                 command.ExecuteNonQuery();
             }
 
@@ -471,7 +491,7 @@ public class UsageRepository : IDisposable
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                SELECT app_name, start_time, end_time, website_domain
+                SELECT app_name, start_time, end_time, website_domain, app_path
                 FROM app_sessions
                 WHERE date = @date
                 ORDER BY start_time ASC
@@ -485,8 +505,9 @@ public class UsageRepository : IDisposable
                 var startTime = DateTime.Parse(reader.GetString(1));
                 var endTime = DateTime.Parse(reader.GetString(2));
                 var domain = reader.IsDBNull(3) ? null : reader.GetString(3);
+                var appPath = reader.IsDBNull(4) ? null : reader.GetString(4);
 
-                var session = new UsageSession(appName, 0, null, startTime, endTime, domain);
+                var session = new UsageSession(appName, 0, null, startTime, endTime, domain, appPath);
                 results.Add(session);
             }
         }
@@ -591,6 +612,23 @@ public class UsageRepository : IDisposable
     {
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         return Path.Combine(appData, "ScreenTimeTracker", "usage.db");
+    }
+
+    /// <summary>
+    /// Runs a migration command, ignoring errors if the change already exists.
+    /// </summary>
+    private static void RunMigration(SqliteConnection connection, string sql)
+    {
+        try
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = sql;
+            command.ExecuteNonQuery();
+        }
+        catch (SqliteException)
+        {
+            // Column likely already exists, ignore
+        }
     }
 
     public void Dispose()

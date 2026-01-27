@@ -12,6 +12,11 @@ public sealed record UsageSession
     public string AppName { get; }
 
     /// <summary>
+    /// Full path to the executable file.
+    /// </summary>
+    public string? AppPath { get; }
+
+    /// <summary>
     /// Process ID during this session.
     /// </summary>
     public int ProcessId { get; }
@@ -52,7 +57,7 @@ public sealed record UsageSession
     /// </summary>
     public bool IsWebsite => !string.IsNullOrEmpty(WebsiteDomain);
 
-    public UsageSession(string appName, int processId, string? windowTitle, DateTime startTime, DateTime endTime, string? websiteDomain = null)
+    public UsageSession(string appName, int processId, string? windowTitle, DateTime startTime, DateTime endTime, string? websiteDomain = null, string? appPath = null)
     {
         if (string.IsNullOrWhiteSpace(appName))
             throw new ArgumentException("App name cannot be empty", nameof(appName));
@@ -61,6 +66,7 @@ public sealed record UsageSession
             throw new ArgumentException("End time cannot be before start time", nameof(endTime));
 
         AppName = appName;
+        AppPath = appPath;
         ProcessId = processId;
         WindowTitle = windowTitle;
         WebsiteDomain = websiteDomain;
@@ -71,9 +77,9 @@ public sealed record UsageSession
     /// <summary>
     /// Creates a session with the current time as end time.
     /// </summary>
-    public static UsageSession CreateEndingNow(string appName, int processId, string? windowTitle, DateTime startTime, string? websiteDomain = null)
+    public static UsageSession CreateEndingNow(string appName, int processId, string? windowTitle, DateTime startTime, string? websiteDomain = null, string? appPath = null)
     {
-        return new UsageSession(appName, processId, windowTitle, startTime, DateTime.Now, websiteDomain);
+        return new UsageSession(appName, processId, windowTitle, startTime, DateTime.Now, websiteDomain, appPath);
     }
 
     public override string ToString()
@@ -82,3 +88,4 @@ public sealed record UsageSession
         return $"{name}: {Duration.TotalSeconds:F1}s ({StartTime:HH:mm:ss} - {EndTime:HH:mm:ss})";
     }
 }
+

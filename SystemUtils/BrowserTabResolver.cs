@@ -108,6 +108,31 @@ public class BrowserTabResolver
     }
 
     /// <summary>
+    /// Gets the domain from a friendly name (reverse lookup).
+    /// Returns null if no match found.
+    /// </summary>
+    public static string? GetDomainFromFriendlyName(string? friendlyName)
+    {
+        if (string.IsNullOrEmpty(friendlyName))
+            return null;
+
+        // Reverse lookup: find domain by friendly name
+        foreach (var kvp in WellKnownSites)
+        {
+            if (kvp.Value.Equals(friendlyName, StringComparison.OrdinalIgnoreCase))
+            {
+                return kvp.Key;
+            }
+        }
+
+        // If it already looks like a domain (contains "."), return it as-is
+        if (friendlyName.Contains('.'))
+            return friendlyName;
+
+        return null;
+    }
+
+    /// <summary>
     /// Attempts to extract the current URL from a browser window using UI Automation.
     /// Returns the domain (e.g., "youtube.com") or null if extraction fails.
     /// Includes a retry mechanism to handle cases where the URL isn't immediately available.
