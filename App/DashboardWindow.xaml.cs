@@ -23,7 +23,11 @@ public partial class DashboardWindow : Window
     private readonly AppBlockerService _appBlockerService;
     private readonly Tracking.ForegroundAppTracker _foregroundTracker;
     private readonly StreakService _streakService;
+    private readonly CategoryService _categoryService;
     private readonly ThemeManager _themeManager;
+    
+    // Active focus session tracking
+    private FocusTimerWindow? _activeFocusWindow = null;
 
     // Tempo Theme Colors - Now retrieved dynamically or kept for graph logic
     // We will use DynamicResource in XAML, but for code-behind graph we might need access.
@@ -38,7 +42,8 @@ public partial class DashboardWindow : Window
         AppBlockerService appBlockerService, 
         Tracking.ForegroundAppTracker foregroundTracker, 
         ThemeManager themeManager,
-        StreakService streakService)
+        StreakService streakService,
+        CategoryService categoryService)
     {
         InitializeComponent();
         
@@ -50,6 +55,7 @@ public partial class DashboardWindow : Window
         _foregroundTracker = foregroundTracker;
         _themeManager = themeManager;
         _streakService = streakService;
+        _categoryService = categoryService;
         
         // Subscribe to streak updates
         _streakService.StreakUpdated += (s, e) => UpdateStreakDisplay();
@@ -72,16 +78,30 @@ public partial class DashboardWindow : Window
         _refreshTimer.Start();
 
         // Initial Load
-        Loaded += (s, e) => RefreshData();
+        Loaded += (s, e) => {
+            UpdateDailyReport(); // Load graph once on startup
+            RefreshData(); // Start updating stats
+            // Force verify current foreground on load
+            _foregroundTracker.CheckCurrentForeground();
+        };
+        
+        // Debug: Listen to foreground changes
+        _foregroundTracker.ForegroundChanged += (s, e) =>
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (TxtTrackingDebug != null)
+                {
+                    TxtTrackingDebug.Text = $"Tracking: {e.EffectiveName ?? e.AppName} ({e.ProcessId})";}
+            });
+        };
     }
 
     private void RefreshData()
     {
-        // 1. Quick Stats (Right Column) - Now consolidated into UpdateStats
+        // Quick Stats only - called every second by timer
+        // Do NOT call UpdateDailyReport here - it blocks UI
         UpdateStats();
-
-        // 2. Daily Report (Center Column)
-        UpdateDailyReport();
     }
 
     private async void UpdateStats()
@@ -124,25 +144,24 @@ public partial class DashboardWindow : Window
         {
             var date = startOfWeek.AddDays(i);
             
-            // 1. Label
+            // 1. Label (Day of Week)
             var dayLabel = new TextBlock
             {
                 Text = date.DayOfWeek.ToString().Substring(0, 1), // M, T...
-                FontSize = 10, 
-                FontWeight = FontWeights.Medium,
-                Foreground = new SolidColorBrush(Color.FromRgb(156, 163, 175)), // Gray-400
+                FontSize = 11, 
+                FontWeight = FontWeights.SemiBold,
+                Foreground = (Brush)FindResource("TextSecondaryBrush"),
                 HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 0, 0, 6)
+                Margin = new Thickness(0, 0, 0, 8)
             };
             Grid.SetRow(dayLabel, 0);
             Grid.SetColumn(dayLabel, i);
             StreakDaysGrid.Children.Add(dayLabel);
 
-            // 2. Bubble
+            // 2. Bubble Container
             bool isCompleted = false;
             if (streak > 0 && lastSession.HasValue)
             {
-                // Check if date is within the streak range ending at LastSession
                 var startOfStreak = lastSession.Value.AddDays(-(streak - 1));
                 if (date >= startOfStreak && date <= lastSession.Value)
                 {
@@ -156,16 +175,13 @@ public partial class DashboardWindow : Window
                 CornerRadius = new CornerRadius(11),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Background = isCompleted 
-                    ? (Brush)FindResource("SuccessBrush") // Use Success instead of Red for positive streak? Or stick to Fire Red?
-                    : (Brush)FindResource("BorderBrush") 
+                    ? (Brush)FindResource("DangerBrush") // Red for completed streak
+                    : (Brush)FindResource("BorderBrush")
             };
-            
-            // If we want Red for streak, we should add Fire/Danger brush
-            if (isCompleted) bubble.Background = (Brush)FindResource("DangerBrush"); // Fire is usually red/orange
             
             if (isCompleted)
             {
-                // Checkmark
+                // Checkmark for completed days
                 var check = new TextBlock
                 {
                     Text = "✓",
@@ -177,6 +193,8 @@ public partial class DashboardWindow : Window
                 };
                 bubble.Child = check;
             }
+
+            bubble.Child = bubble.Child;
 
             Grid.SetRow(bubble, 1);
             Grid.SetColumn(bubble, i);
@@ -255,7 +273,6 @@ public partial class DashboardWindow : Window
     {
         double percentage = (app.TotalTime.TotalSeconds / totalSeconds) * 100;
         if (percentage < 1) percentage = 1; // Minimum width
-        //if (percentage < 0) percentage = 0; // This line was replaced by the above, assuming percentage won't be negative.
 
         // Container Grid
         var grid = new Grid { Margin = new Thickness(0, 0, 0, 12) };
@@ -322,7 +339,7 @@ public partial class DashboardWindow : Window
         Grid.SetRow(textStack, 0);
         grid.Children.Add(textStack);
 
-        // 2. Progress Bar
+        // 2. Progress Bar (using accent color as before)
         var barGrid = new Grid { Height = 6, ClipToBounds = true }; 
         var barCornerRadius = new CornerRadius(3);
         
@@ -339,7 +356,7 @@ public partial class DashboardWindow : Window
         
         var fill = new Border 
         { 
-            Background = (Brush)FindResource("AccentBrush"), 
+            Background = (Brush)FindResource("AccentBrush"), // Keep original accent color
             CornerRadius = barCornerRadius
         };
         Grid.SetColumn(fill, 0);
@@ -384,119 +401,196 @@ public partial class DashboardWindow : Window
          }
     }
 
+    private bool _isUpdatingGraph = false;
+    
     private void UpdateDailyReport()
     {
-        // Always update weekly chart
-        WeeklyGraphContainer.Children.Clear();
-        WeeklyGraphContainer.ColumnDefinitions.Clear();
-        
-        // Add 7 columns for 7 days
-        for (int i = 0; i < 7; i++)
+        // Prevent re-entry
+        if (_isUpdatingGraph) return;
+        _isUpdatingGraph = true;
+
+        try
         {
-            WeeklyGraphContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        }
-
-        var history = _aggregationService.GetDailyHistory(7);
-        var today = DateOnly.FromDateTime(DateTime.Now);
-        
-        // Find max for scaling
-        double maxSeconds = history.Values.Any() ? history.Values.Max(t => t.TotalSeconds) : 1;
-        if (maxSeconds <= 0) maxSeconds = 1;
-
-        int colIndex = 0;
-        // Iterate last 7 days including today
-        for (int i = 6; i >= 0; i--)
-        {
-            var date = today.AddDays(-i);
-            var time = history.ContainsKey(date) ? history[date] : TimeSpan.Zero;
-            var isToday = date == today;
-
-            // Bar Container
-            var container = new Grid 
-            { 
-                Margin = new Thickness(5, 0, 5, 0),
-                Background = Brushes.Transparent, // Capture clicks
-                Cursor = System.Windows.Input.Cursors.Hand,
-                Tag = date
-            };
-            container.MouseLeftButtonDown += Day_Click;
-
-            container.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Space above
-            container.RowDefinitions.Add(new RowDefinition { Height = new GridLength(0, GridUnitType.Auto) }); // Label
-
-            double pct = time.TotalSeconds / maxSeconds;
-            // Use a Grid for the bar to handle proportional height
-            var barGrid = new Grid();
-            barGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1 - pct, GridUnitType.Star) }); // Empty top
-            barGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(pct, GridUnitType.Star) }); // Filled bottom
-
-            // Create gradient brush for active bars - Tempo theme
-            Brush barBrush;
-            var accentColor = (Color)FindResource("AccentColor");
-            var accentLightColor = (Color)FindResource("AccentLightColor"); // Or use a darker shade for gradient end?
+            var today = DateOnly.FromDateTime(DateTime.Now);
+            // Use only fast pre-aggregated daily history - NO session queries
+            var history = _aggregationService.GetDailyHistory(7);
             
-            // Actually, let's use the define BarActiveColorStart/End if available, or just derive
-            // For now, let's just use the AccentColor for simplicity or simple gradient
-            // But to keep the "Wow" factor, let's use the gradient.
-            // We can treat AccentColor as Start and a slightly modified version as End, or just use Solid for now to be safe with switching.
-            // Or better: Let's use the resource brushes directly if possible.
-            // But we need a gradient.
+            // Find max for scaling
+            double maxSeconds = history.Values.Any() ? history.Values.Max(t => t.TotalSeconds) : 1;
+            if (maxSeconds <= 0) maxSeconds = 1;
+
+            // Clear and render
+            WeeklyGraphContainer.Children.Clear();
+            WeeklyGraphContainer.ColumnDefinitions.Clear();
             
-            if (isToday)
+            // Add 7 columns for 7 days
+            for (int i = 0; i < 7; i++)
             {
-                barBrush = new LinearGradientBrush(
-                    (Color)FindResource("BarActiveColorStart"), 
-                    (Color)FindResource("BarActiveColorEnd"), 
-                    90);
-            }
-            else
-            {
-                barBrush = new LinearGradientBrush(
-                    (Color)FindResource("BarInactiveColorStart"), 
-                    (Color)FindResource("BarInactiveColorEnd"), 
-                    90);
+                WeeklyGraphContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             }
 
-            var bar = new Border
+            // Render simple solid color bars (FAST)
+            int colIndex = 0;
+            for (int i = 6; i >= 0; i--)
             {
-                Background = barBrush,
-                CornerRadius = new CornerRadius(8),
-                VerticalAlignment = VerticalAlignment.Stretch,
-                Effect = isToday ? new System.Windows.Media.Effects.DropShadowEffect
+                var date = today.AddDays(-i);
+                var time = history.ContainsKey(date) ? history[date] : TimeSpan.Zero;
+                var isToday = date == today;
+
+                // Bar Container
+                var container = new Grid 
+                { 
+                    Margin = new Thickness(5, 0, 5, 0),
+                    Background = Brushes.Transparent,
+                    Cursor = System.Windows.Input.Cursors.Hand,
+                    Tag = date
+                };
+                container.MouseLeftButtonDown += Day_Click;
+
+                container.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+                container.RowDefinitions.Add(new RowDefinition { Height = new GridLength(0, GridUnitType.Auto) });
+
+                double pct = time.TotalSeconds / maxSeconds;
+                
+                var barGrid = new Grid();
+                barGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1 - pct, GridUnitType.Star) });
+                barGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(pct, GridUnitType.Star) });
+
+                // Simple solid gradient bar (FAST - no category lookup)
+                var accentLight = GetColorResource("AccentLightColor", Color.FromRgb(233, 213, 255));
+                var accent = GetColorResource("AccentColor", Color.FromRgb(147, 51, 234));
+                var inactiveStart = GetColorResource("BarInactiveColorStart", Color.FromRgb(233, 213, 255));
+                var inactiveEnd = GetColorResource("BarInactiveColorEnd", Color.FromRgb(216, 180, 254));
+
+                var bar = new Border
                 {
-                    Color = Color.FromRgb(147, 51, 234), // Purple glow
-                    BlurRadius = 12,
-                    ShadowDepth = 0,
-                    Opacity = 0.4
-                } : null
-            };
-            
-            Grid.SetRow(bar, 1);
-            barGrid.Children.Add(bar);
-            
-            // Add barGrid to container
-            Grid.SetRow(barGrid, 0);
-            container.Children.Add(barGrid);
+                    Background = time.TotalSeconds > 0 
+                        ? new LinearGradientBrush(
+                            accentLight, 
+                            accent, 
+                            90)
+                        : new LinearGradientBrush(
+                            inactiveStart, 
+                            inactiveEnd, 
+                            90),
+                    CornerRadius = new CornerRadius(8),
+                    ToolTip = $"{date:ddd}: {FormatTimeCompact(time)}",
+                    Effect = isToday ? new System.Windows.Media.Effects.DropShadowEffect
+                    {
+                        Color = Color.FromRgb(147, 51, 234),
+                        BlurRadius = 12,
+                        ShadowDepth = 0,
+                        Opacity = 0.4
+                    } : null
+                };
+                
+                Grid.SetRow(bar, 1);
+                barGrid.Children.Add(bar);
+                
+                Grid.SetRow(barGrid, 0);
+                container.Children.Add(barGrid);
 
-            // Day Label
-            var dayLabel = new TextBlock
+                // Day Label
+                var dayLabel = new TextBlock
+                {
+                    Text = date.ToString("ddd"),
+                    Foreground = isToday
+                        ? GetBrushResource("AccentBrush", Brushes.MediumPurple)
+                        : GetBrushResource("TextSecondaryBrush", Brushes.Gray),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Margin = new Thickness(0, 8, 0, 0),
+                    FontSize = 12,
+                    FontWeight = isToday ? FontWeights.Bold : FontWeights.Normal
+                };
+                
+                Grid.SetRow(dayLabel, 1);
+                container.Children.Add(dayLabel);
+
+                Grid.SetColumn(container, colIndex);
+                WeeklyGraphContainer.Children.Add(container);
+                
+                colIndex++;
+            }
+        
+            // Update Daily Average display
+            var weeklyTotalSeconds = history.Values.Sum(t => t.TotalSeconds);
+            var avgSeconds = weeklyTotalSeconds / 7.0;
+            var avgTime = TimeSpan.FromSeconds(avgSeconds);
+            TxtDailyAverage.Text = avgTime.TotalHours >= 1 
+                ? $"{(int)avgTime.TotalHours}h {avgTime.Minutes}m"
+                : $"{avgTime.Minutes}m";
+
+            // Render simple Category Legend (no data - just placeholders for now)
+            CategoryLegendContainer.Children.Clear();
+            CategoryLegendContainer.ColumnDefinitions.Clear();
+            CategoryLegendContainer.RowDefinitions.Clear();
+            
+            // 2x2 grid
+            CategoryLegendContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            CategoryLegendContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            CategoryLegendContainer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            CategoryLegendContainer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            
+            // Fixed 4 categories
+            var fixedCategories = new (string name, int col, int row)[]
             {
-                Text = date.ToString("ddd"), // Mon, Tue...
-                Foreground = isToday ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("TextSecondaryBrush"),
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 8, 0, 0),
-                FontSize = 12,
-                FontWeight = isToday ? FontWeights.Bold : FontWeights.Normal
+                ("Productivity", 0, 0),
+                ("Entertainment", 1, 0),
+                ("Social", 0, 1),
+                ("Other", 1, 1)
             };
             
-            Grid.SetRow(dayLabel, 1);
-            container.Children.Add(dayLabel);
-
-            // Add to weekly container
-            Grid.SetColumn(container, colIndex);
-            WeeklyGraphContainer.Children.Add(container);
-            
-            colIndex++;
+            foreach (var (catName, col, row) in fixedCategories)
+            {
+                var legendItem = new StackPanel 
+                { 
+                    Orientation = System.Windows.Controls.Orientation.Horizontal, 
+                    Margin = new Thickness(0, 8, 12, 8) 
+                };
+                
+                var categoryBrushKey = CategoryService.GetCategoryBrushKey(catName);
+                var categoryBrush = GetBrushResource(categoryBrushKey, GetBrushResource("CategoryOtherBrush", Brushes.Gray));
+                var categoryIcon = CategoryService.GetCategoryIcon(catName);
+                
+                var iconGrid = new Grid { Width = 36, Height = 36, Margin = new Thickness(0, 0, 10, 0) };
+                var iconBg = new Border
+                {
+                    Width = 36,
+                    Height = 36,
+                    CornerRadius = new CornerRadius(18),
+                    Background = categoryBrush,
+                    Opacity = 0.15
+                };
+                var iconEmoji = new TextBlock
+                {
+                    Text = categoryIcon,
+                    FontSize = 16,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                iconGrid.Children.Add(iconBg);
+                iconGrid.Children.Add(iconEmoji);
+                
+                var categoryNameText = new TextBlock 
+                { 
+                    Text = catName, 
+                    FontSize = 13,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = (Brush)FindResource("TextPrimaryBrush"),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                
+                legendItem.Children.Add(iconGrid);
+                legendItem.Children.Add(categoryNameText);
+                
+                Grid.SetColumn(legendItem, col);
+                Grid.SetRow(legendItem, row);
+                CategoryLegendContainer.Children.Add(legendItem);
+            }
+        }
+        finally
+        {
+            _isUpdatingGraph = false;
         }
     }
 
@@ -504,6 +598,26 @@ public partial class DashboardWindow : Window
     {
         if (t.TotalHours >= 1) return $"{t.TotalHours:F1}h";
         return $"{t.Minutes}m";
+    }
+
+    private Brush GetBrushResource(string key, Brush fallback)
+    {
+        if (TryFindResource(key) is Brush brush)
+            return brush;
+
+        return fallback;
+    }
+
+    private Color GetColorResource(string key, Color fallback)
+    {
+        var resource = TryFindResource(key);
+        if (resource is Color color)
+            return color;
+
+        if (resource is SolidColorBrush brush)
+            return brush.Color;
+
+        return fallback;
     }
 
     private string FormatTimeCompact(TimeSpan t)
@@ -548,125 +662,28 @@ public partial class DashboardWindow : Window
         if (sender is Grid grid && grid.Tag is DateOnly date)
         {
             e.Handled = true; // Prevent event from bubbling up to trigger DragMove
-            ShowHourlyDetail(date);
+            
+            // Navigate to Activity Log section
+            NavigateToActivityLog(date);
         }
     }
 
-    private void BackToWeekly_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    private void NavigateToActivityLog(DateOnly date)
     {
-        e.Handled = true;
-        
-        // Hide hourly view
-        HourlyGraphContainer.Visibility = Visibility.Collapsed;
-        
-        // Update header
-        TxtReportSubtitle.Text = "Last 7 Days";
-        ((TextBlock)((Border)ViewModeBadge).Child).Text = "Weekly View";
-    }
-
-    private void ShowHourlyDetail(DateOnly date)
-    {
-        // Update header
-        TxtReportSubtitle.Text = $"{date:ddd, MMM d} - Hourly Breakdown";
-        ((TextBlock)((Border)ViewModeBadge).Child).Text = "Hourly View";
-
-        var sessions = _aggregationService.GetSessionsForDate(date);
-        
-        // Create hourly buckets (0-23)
-        var hourlyMinutes = new double[24];
-        foreach (var session in sessions)
-        {
-            int hour = session.StartTime.Hour;
-            hourlyMinutes[hour] += session.Duration.TotalMinutes;
-        }
-        
-        double maxMinutes = hourlyMinutes.Max();
-        if (maxMinutes <= 0) maxMinutes = 1;
-
-        // Show and populate hourly container
-        HourlyGraphContainer.Visibility = Visibility.Visible;
-        HourlyGraphContainer.Children.Clear();
-        HourlyGraphContainer.ColumnDefinitions.Clear();
-
-        // Add 24 columns for hours
-        for (int h = 0; h < 24; h++)
-        {
-            HourlyGraphContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        }
-
-        for (int h = 0; h < 24; h++)
-        {
-            double pct = hourlyMinutes[h] / maxMinutes;
-
-            // Bar Container
-            var container = new Grid 
-            { 
-                Margin = new Thickness(1, 0, 1, 0),
-                Background = Brushes.Transparent,
-                Cursor = System.Windows.Input.Cursors.Hand,
-                ToolTip = $"{h}:00 - {hourlyMinutes[h]:F0} min"
-            };
-            container.MouseLeftButtonDown += BackToWeekly_Click;
-
-            container.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Space above
-            container.RowDefinitions.Add(new RowDefinition { Height = new GridLength(18, GridUnitType.Pixel) }); // Label row with fixed height
-
-            // Use a Grid for the bar to handle proportional height
-            var barGrid = new Grid();
-            barGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1 - pct, GridUnitType.Star) }); // Empty top
-            barGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(pct, GridUnitType.Star) }); // Filled bottom
-
-            // Create gradient brush for active bars - Tempo theme
-            Brush barBrush = hourlyMinutes[h] > 0 
-                ? new LinearGradientBrush(
-                    (Color)FindResource("BarActiveColorStart"),
-                    (Color)FindResource("BarActiveColorEnd"),
-                    90)
-                : (Brush)FindResource("BgBrush"); // inactive
-
-            var bar = new Border
-            {
-                Background = barBrush,
-                CornerRadius = new CornerRadius(4),
-                VerticalAlignment = VerticalAlignment.Stretch,
-                Effect = hourlyMinutes[h] > 0 ? new System.Windows.Media.Effects.DropShadowEffect
-                {
-                    Color = Color.FromRgb(147, 51, 234), // Purple glow
-                    BlurRadius = 8,
-                    ShadowDepth = 0,
-                    Opacity = 0.3
-                } : null
-            };
-            
-            Grid.SetRow(bar, 1);
-            barGrid.Children.Add(bar);
-            
-            Grid.SetRow(barGrid, 0);
-            container.Children.Add(barGrid);
-
-            // Hour label - show every 6 hours for cleaner look (0, 6, 12, 18)
-            if (h % 6 == 0)
-            {
-                var label = new TextBlock 
-                { 
-                    Text = $"{h}h", 
-                    FontSize = 10,
-                    FontWeight = FontWeights.Medium,
-                    Foreground = new SolidColorBrush(Color.FromRgb(107, 114, 128)), // Gray-500
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-                Grid.SetRow(label, 1);
-                container.Children.Add(label);
-            }
-
-            Grid.SetColumn(container, h);
-            HourlyGraphContainer.Children.Add(container);
-        }
+        // TODO: Navigate to Activity Log section with the selected date
+        // For now, just show a message
+        System.Windows.MessageBox.Show($"Activity Log for {date:ddd, MMM d}\n\nThis will open the Activity Log section.", "Activity Log", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private void FocusButton_Click(object sender, RoutedEventArgs e)
     {
+        // Prevent concurrent focus sessions
+        if (_activeFocusWindow != null)
+        {
+            System.Windows.MessageBox.Show("A focus session is already active. Please stop it first.", "Focus Session Active", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
         // First, show duration selection dialog
         var durationDialog = new FocusDurationDialog();
         durationDialog.Owner = this;
@@ -676,6 +693,13 @@ public partial class DashboardWindow : Window
             return; // User cancelled
 
         int selectedMinutes = durationDialog.SelectedMinutes;
+        int breakMinutes = durationDialog.BreakMinutes;
+        string intent = string.IsNullOrEmpty(durationDialog.FocusIntent) ? "Deep Work" : durationDialog.FocusIntent;
+
+        // Show Progress Card
+        FocusProgressCard.Visibility = Visibility.Visible;
+        TxtCurrentIntent.Text = intent;
+        UpdateFocusUIDisplay(TimeSpan.FromMinutes(selectedMinutes), TimeSpan.FromMinutes(selectedMinutes));
 
         // Start tray focus mode
         _trayIconManager.StartFocusMode(selectedMinutes);
@@ -684,41 +708,115 @@ public partial class DashboardWindow : Window
         _focusService.StartFocusSession();
 
         // Open the Focus Timer popup with selected duration and blocker service
-        var focusWindow = new FocusTimerWindow(selectedMinutes, _appBlockerService);
+        var focusWindow = new FocusTimerWindow(selectedMinutes, breakMinutes, _appBlockerService);
+        _activeFocusWindow = focusWindow;
         
-        // Wire up timer tick to update tray
+        // Wire up timer tick to update tray and dashboard
         focusWindow.TimerTick += (s, args) =>
         {
-            _trayIconManager.UpdateFocusTime(args.Remaining, args.Total);
+            Dispatcher.Invoke(() => {
+                _trayIconManager.UpdateFocusTime(args.Remaining, args.Total);
+                UpdateFocusUIDisplay(args.Remaining, args.Total);
+            });
         };
 
         // Wire up pause state to tray
         focusWindow.PauseStateChanged += (s, isPaused) =>
         {
-            _trayIconManager.SetFocusPaused(isPaused);
+            Dispatcher.Invoke(() => {
+                _trayIconManager.SetFocusPaused(isPaused);
+                TxtFocusStatus.Text = isPaused ? "Focus Session Paused" : "Focus Session Active";
+                TxtFocusStatus.Foreground = isPaused ? (Brush)FindResource("TextSecondaryBrush") : (Brush)FindResource("AccentBrush");
+            });
         };
 
         focusWindow.SessionCompleted += (s, args) =>
         {
-            _trayIconManager.EndFocusMode();
-            _focusService.EndFocusSession(completed: true);
-            _streakService.RecordSessionCompletion();
+            Dispatcher.Invoke(() => {
+                _trayIconManager.EndFocusMode();
+                _focusService.EndFocusSession(completed: true);
+                _streakService.RecordSessionCompletion();
+                FocusProgressCard.Visibility = Visibility.Collapsed;
+                _activeFocusWindow = null;
+            });
         };
         
         focusWindow.SessionCancelled += (s, args) =>
         {
-            _trayIconManager.EndFocusMode();
-            _focusService.EndFocusSession(completed: false);
+            Dispatcher.Invoke(() => {
+                _trayIconManager.EndFocusMode();
+                _focusService.EndFocusSession(completed: false);
+                FocusProgressCard.Visibility = Visibility.Collapsed;
+                _activeFocusWindow = null;
+            });
         };
 
         // Handle window closed (e.g., if user closes via other means)
         focusWindow.Closed += (s, args) =>
         {
-            _trayIconManager.EndFocusMode();
-            _focusService.EndFocusSession(completed: false);
+            Dispatcher.Invoke(() => {
+                _trayIconManager.EndFocusMode();
+                _focusService.EndFocusSession(completed: false);
+                FocusProgressCard.Visibility = Visibility.Collapsed;
+                _activeFocusWindow = null;
+            });
         };
 
         focusWindow.Show();
         focusWindow.StartTimer();
+    }
+
+    private void StopFocusButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeFocusWindow != null)
+        {
+            _activeFocusWindow.Close();
+            _activeFocusWindow = null;
+        }
+        
+        _trayIconManager.EndFocusMode();
+        _focusService.EndFocusSession(completed: false);
+        FocusProgressCard.Visibility = Visibility.Collapsed;
+    }
+
+    // Focus timer state
+    private bool _focusShowTimeSpent = false;
+    private TimeSpan _focusRemaining;
+    private TimeSpan _focusTotal;
+
+    private void FocusTimerDisplay_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        _focusShowTimeSpent = !_focusShowTimeSpent;
+        UpdateFocusUIDisplay(_focusRemaining, _focusTotal);
+    }
+
+    private void UpdateFocusUIDisplay(TimeSpan remaining, TimeSpan total)
+    {
+        _focusRemaining = remaining;
+        _focusTotal = total;
+        
+        TimeSpan displayTime;
+        if (_focusShowTimeSpent)
+        {
+            displayTime = total - remaining;
+            TxtFocusTimeLabel.Text = "SPENT";
+            TxtFocusTimeLeft.Foreground = (Brush)FindResource("SuccessBrush"); // Green for spent
+        }
+        else
+        {
+            displayTime = remaining;
+            TxtFocusTimeLabel.Text = "LEFT";
+            TxtFocusTimeLeft.Foreground = (Brush)FindResource("TextPrimaryBrush"); // Default
+        }
+
+        TxtFocusTimeLeft.Text = $"{(int)displayTime.TotalMinutes:D2}:{displayTime.Seconds:D2}";
+        
+        double progress = 1 - (remaining.TotalSeconds / total.TotalSeconds);
+        FocusProgressBar.Value = progress * 100;
+
+        // Update Arc (same logic as widget)
+        double circumference = 3.14159; 
+        double filledAmount = progress * circumference;
+        FocusProgressArc.StrokeDashArray = new DoubleCollection { filledAmount, 100 };
     }
 }

@@ -211,6 +211,65 @@ public class CategoryService
         "Other"
     };
 
+    /// <summary>
+    /// Gets the resource key for a category's brush (e.g., "CategoryProductivityBrush").
+    /// Use with FindResource() in WPF code-behind.
+    /// </summary>
+    public static string GetCategoryBrushKey(string category)
+    {
+        return category switch
+        {
+            "Productivity" => "CategoryProductivityBrush",
+            "Entertainment" => "CategoryEntertainmentBrush",
+            "Communication" => "CategoryCommunicationBrush",
+            "Gaming" => "CategoryGamingBrush",
+            "Browsing" => "CategoryBrowsingBrush",
+            "Social" => "CategorySocialBrush",
+            "Shopping" => "CategoryShoppingBrush",
+            "System" => "CategorySystemBrush",
+            _ => "CategoryOtherBrush"
+        };
+    }
+
+    /// <summary>
+    /// Gets an emoji icon for a category.
+    /// </summary>
+    public static string GetCategoryIcon(string category)
+    {
+        return category switch
+        {
+            "Productivity" => "📋",
+            "Entertainment" => "👾",
+            "Communication" => "💬",
+            "Gaming" => "🎮",
+            "Browsing" => "🌐",
+            "Social" => "👥",
+            "Shopping" => "💳",
+            "System" => "⚙️",
+            "Finance" => "💰",
+            _ => "📄"
+        };
+    }
+
+    /// <summary>
+    /// Gets the resource key for a category's color (e.g., "CategoryProductivityColor").
+    /// </summary>
+    public static string GetCategoryColorKey(string category)
+    {
+        return category switch
+        {
+            "Productivity" => "CategoryProductivityColor",
+            "Entertainment" => "CategoryEntertainmentColor",
+            "Communication" => "CategoryCommunicationColor",
+            "Gaming" => "CategoryGamingColor",
+            "Browsing" => "CategoryBrowsingColor",
+            "Social" => "CategorySocialColor",
+            "Shopping" => "CategoryShoppingColor",
+            "System" => "CategorySystemColor",
+            _ => "CategoryOtherColor"
+        };
+    }
+
     private static string CleanDomain(string domain)
     {
         // Remove "www." prefix

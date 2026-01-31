@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -48,12 +49,15 @@ public partial class FocusTimerWindow : Window
         }
     }
 
-    public FocusTimerWindow(int focusMinutes = 25, AppBlockerService? appBlockerService = null)
+    private int _scheduledBreakMinutes;
+
+    public FocusTimerWindow(int focusMinutes = 25, int breakMinutes = 5, AppBlockerService? appBlockerService = null)
     {
         InitializeComponent();
         
         _totalTime = TimeSpan.FromMinutes(focusMinutes);
         _remainingTime = _totalTime;
+        _scheduledBreakMinutes = breakMinutes;
         _isPaused = false;
         _isBreak = false;
         _clickCount = 0;
@@ -353,24 +357,25 @@ public partial class FocusTimerWindow : Window
         {
             // Show time spent
             displayTime = _totalTime - _remainingTime;
-            TxtTimer.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0, 224, 150)); // Green for spent
+            TxtTimer.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0, 224, 150)); // Green for spent (Success/Accent)
+            // Or use dynamic resource: TxtTimer.SetResourceReference(TextBlock.ForegroundProperty, "SuccessBrush");
         }
         else
         {
             // Show time left
             displayTime = _remainingTime;
-            TxtTimer.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 255, 255)); // White for left
+            // Use Theme Brush instead of hardcoded White
+            TxtTimer.SetResourceReference(TextBlock.ForegroundProperty, "TextPrimaryBrush");
         }
         
         TxtTimer.Text = $"{(int)displayTime.TotalMinutes:D2}:{displayTime.Seconds:D2}";
         
         // Update progress ring using StrokeDashArray
-        // The ellipse circumference is roughly 3.14 * diameter
-        // We set dash pattern to show filled portion
+        // Ellipse is 24x24, circumference = π * diameter = π * 24 ≈ 75.4
         double progress = 1 - (_remainingTime.TotalSeconds / _totalTime.TotalSeconds);
-        double circumference = 3.14159;  // Normalized for 100-unit scale
+        double circumference = Math.PI * 24; // ~75.4 for 24px diameter
         double filledAmount = progress * circumference;
-        ProgressArcFill.StrokeDashArray = new DoubleCollection { filledAmount, 100 };
+        ProgressArcFill.StrokeDashArray = new DoubleCollection { filledAmount, circumference };
     }
 
     public void StartTimer()
@@ -386,16 +391,16 @@ public partial class FocusTimerWindow : Window
             // Focus session complete - offer break
             SessionCompleted?.Invoke(this, EventArgs.Empty);
             
-            // Start 5-min break
+            // Start break
             var result = System.Windows.MessageBox.Show(
-                "Focus session complete! Take a 5-minute break?",
+                $"Focus session complete! Take a {_scheduledBreakMinutes}-minute break?",
                 "Well Done!",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Information);
 
             if (result == MessageBoxResult.Yes)
             {
-                StartBreak(5);
+                StartBreak(_scheduledBreakMinutes);
             }
             else
             {

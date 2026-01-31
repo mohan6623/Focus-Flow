@@ -265,6 +265,7 @@
                     <StackPanel>
                         <TextBlock Text="Dashboard" FontSize="28" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" FontFamily="Segoe UI Variable Display"/>
                         <TextBlock Text="Overview of your digital habits" FontSize="14" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,5,0,0"/>
+                        <TextBlock x:Name="TxtTrackingDebug" Text="Tracking: ..." FontSize="12" Foreground="{DynamicResource AccentBrush}" Margin="0,5,0,0" Opacity="0.8"/>
                     </StackPanel>
                     
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
@@ -333,41 +334,123 @@
                         <ColumnDefinition Width="3.5*"/> <!-- Reorganized Stats -->
                     </Grid.ColumnDefinitions>
                     
-                    <!-- COL 1: Daily Report -->
-                    <Border Grid.Column="0" Style="{StaticResource CardStyle}" Margin="0,0,16,0">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>   <!-- Header -->
-                                <RowDefinition Height="1.2*"/>   <!-- Weekly Chart -->
-                                <RowDefinition Height="1*"/>     <!-- Hourly Chart -->
-                            </Grid.RowDefinitions>
+                    <!-- COL 1: Center Column (Focus Progress + Daily Report) -->
+                    <Grid Grid.Column="0" Margin="0,0,16,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/> <!-- Focus Progress -->
+                            <RowDefinition Height="*"/>    <!-- Daily Report -->
+                        </Grid.RowDefinitions>
 
-                            <!-- Header -->
-                            <Grid Grid.Row="0" Margin="0,0,0,20">
-                                <StackPanel>
-                                    <TextBlock Text="Activity Report" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                                    <TextBlock x:Name="TxtReportSubtitle" Text="Last 7 Days" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
-                                </StackPanel>
-                                <Border x:Name="ViewModeBadge" Background="{DynamicResource AccentLightBrush}" CornerRadius="12" HorizontalAlignment="Right" Padding="12,6">
-                                    <TextBlock Text="Weekly View" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
-                                </Border>
-                            </Grid>
+                        <!-- 1. Focus Session Progress Card -->
+                        <Border Grid.Row="0" x:Name="FocusProgressCard" Style="{StaticResource CardStyle}" Margin="0,0,0,16" Visibility="Collapsed">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/> <!-- Progress Circle -->
+                                    <ColumnDefinition Width="*"/>    <!-- Details -->
+                                </Grid.ColumnDefinitions>
 
-                            <!-- Weekly Chart (always visible) -->
-                            <Grid Grid.Row="1" Margin="0,10">
-                                <Grid x:Name="WeeklyGraphContainer">
-                                    <!-- 7 columns for 7 days will be added in code-behind -->
+                                <!-- Circular Progress -->
+                                <Grid Width="100" Height="100" Margin="0,0,24,0" Cursor="Hand" MouseLeftButtonDown="FocusTimerDisplay_Click" ToolTip="Click to toggle time left/spent">
+                                    <Ellipse Stroke="{DynamicResource BorderBrush}" StrokeThickness="8" Fill="Transparent"/>
+                                    <Ellipse x:Name="FocusProgressArc" 
+                                             Stroke="{DynamicResource AccentBrush}" 
+                                             StrokeThickness="8" 
+                                             Fill="Transparent"
+                                             StrokeDashArray="0 100"
+                                             RenderTransformOrigin="0.5,0.5">
+                                        <Ellipse.RenderTransform>
+                                            <RotateTransform Angle="-90"/>
+                                        </Ellipse.RenderTransform>
+                                    </Ellipse>
+                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                        <TextBlock x:Name="TxtFocusTimeLeft" Text="25:00" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Center"/>
+                                        <TextBlock x:Name="TxtFocusTimeLabel" Text="LEFT" FontSize="8" FontWeight="Bold" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" Margin="0,-2,0,0"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Focus Session Info -->
+                                <Grid Grid.Column="1">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    
+                                    <StackPanel Grid.Row="0" VerticalAlignment="Center">
+                                        <TextBlock x:Name="TxtFocusStatus" Text="Focus Session Active" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
+                                        <TextBlock x:Name="TxtCurrentIntent" Text="Deep Work on Project" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,4,0,8" TextTrimming="CharacterEllipsis"/>
+                                        
+                                        <ProgressBar x:Name="FocusProgressBar" Height="6" Background="{DynamicResource BgBrush}" Foreground="{DynamicResource AccentBrush}" Value="40" BorderThickness="0">
+                                            <ProgressBar.Template>
+                                                <ControlTemplate TargetType="ProgressBar">
+                                                    <Grid>
+                                                        <Border Background="{TemplateBinding Background}" CornerRadius="3"/>
+                                                        <Border x:Name="PART_Indicator" Background="{TemplateBinding Foreground}" CornerRadius="3" HorizontalAlignment="Left"/>
+                                                    </Grid>
+                                                </ControlTemplate>
+                                            </ProgressBar.Template>
+                                        </ProgressBar>
+                                    </StackPanel>
+                                    
+                                    <!-- Stop Button -->
+                                    <Button x:Name="BtnStopFocus" Grid.Row="1" 
+                                            Click="StopFocusButton_Click"
+                                            HorizontalAlignment="Right" 
+                                            Margin="0,10,0,0"
+                                            Padding="12,6"
+                                            Cursor="Hand">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{DynamicResource DangerBrush}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="⏹" FontSize="12" Foreground="White" Margin="0,0,6,0"/>
+                                                        <TextBlock Text="Stop" FontSize="12" FontWeight="SemiBold" Foreground="White"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
                                 </Grid>
                             </Grid>
+                        </Border>
 
-                            <!-- Hourly Chart (appears when day is clicked) -->
-                            <Grid Grid.Row="2" Margin="0,10,0,0">
-                                <Grid x:Name="HourlyGraphContainer" Visibility="Collapsed">
-                                    <!-- 24 columns for 24 hours will be added in code-behind -->
+                        <!-- 2. Daily Report Card -->
+                        <Border Grid.Row="1" Style="{StaticResource CardStyle}">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>   <!-- Daily Average Header -->
+                                    <RowDefinition Height="1.5*"/>   <!-- Weekly Chart -->
+                                    <RowDefinition Height="Auto"/>   <!-- Category Legend -->
+                                </Grid.RowDefinitions>
+    
+                                <!-- Daily Average Header -->
+                                <Grid Grid.Row="0" Margin="0,0,0,20">
+                                    <StackPanel>
+                                        <TextBlock Text="Daily Average" FontSize="14" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                            <TextBlock x:Name="TxtDailyAverage" Text="0h 0m" FontSize="32" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            <Border x:Name="TxtDailyChange" Background="{DynamicResource SuccessBrush}" CornerRadius="12" Padding="8,4" Margin="12,0,0,0" VerticalAlignment="Center" Visibility="Collapsed">
+                                                <TextBlock x:Name="TxtDailyChangeText" Text="-12%" FontSize="11" FontWeight="SemiBold" Foreground="White"/>
+                                            </Border>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Grid>
+    
+                                <!-- Weekly Chart -->
+                                <Grid Grid.Row="1" Margin="0,10">
+                                    <Grid x:Name="WeeklyGraphContainer">
+                                        <!-- 7 columns for 7 days will be added in code-behind -->
+                                    </Grid>
+                                </Grid>
+    
+                                <!-- Category Legend -->
+                                <Grid Grid.Row="2" Margin="0,15,0,0">
+                                    <Grid x:Name="CategoryLegendContainer">
+                                        <!-- 2x2 grid of category legends will be added in code-behind -->
+                                    </Grid>
                                 </Grid>
                             </Grid>
-                        </Grid>
-                    </Border>
+                        </Border>
+                    </Grid>
 
                     <!-- COL 2: Quick Stats & App Usage -->
                     <Grid Grid.Column="1">
@@ -390,9 +473,9 @@
                                 </Grid.ColumnDefinitions>
 
                                 <!-- Flame Icon -->
-                                <TextBlock Text="🔥" FontSize="48" VerticalAlignment="Center" Margin="-4,0,12,0" Foreground="#DC2626"/> 
+                                <TextBlock Text="🔥" FontSize="60" VerticalAlignment="Center" Margin="-8,0,5,0" Foreground="#DC2626"/> 
                                 
-                                <StackPanel Grid.Column="1">
+                                <StackPanel Grid.Column="1" Margin="-7,0,0,0">
                                     <!-- Title -->
                                     <TextBlock TextWrapping="Wrap" LineHeight="20">
                                         <Run x:Name="TxtStreakCount" Text="0" FontWeight="Bold" FontSize="15" Foreground="{DynamicResource TextPrimaryBrush}"/>
@@ -412,9 +495,9 @@
                         <!-- Active Time -->
                         <Border Grid.Row="1" Style="{StaticResource CardStyle}" Margin="0,0,0,16">
                             <StackPanel VerticalAlignment="Center">
-                                 <TextBlock Text="Total Active Time" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"/>
-                                 <TextBlock x:Name="TxtActiveTime" Text="0h 0m" FontSize="32" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,5,0,0"/>
-                                 <Grid Margin="0,15,0,0">
+                                 <TextBlock Text="Screen Time" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="15"/>
+                                 <TextBlock x:Name="TxtActiveTime" Text="0h 0m" FontSize="32" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,2,0,0"/>
+                                 <Grid Margin="0,10,0,0">
                                      <Border Background="{DynamicResource BgBrush}" CornerRadius="4" Height="8"/>
                                      <Border Background="{DynamicResource AccentBrush}" CornerRadius="4" Height="8" HorizontalAlignment="Left" Width="150"/>
                                  </Grid>

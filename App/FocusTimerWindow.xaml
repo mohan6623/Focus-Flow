@@ -93,12 +93,12 @@
     </Window.ContextMenu>
 
     <Border x:Name="MainBorder" 
-            Background="#FFFFFF" 
+            Background="{DynamicResource CardBrush}" 
             CornerRadius="10" 
-            BorderBrush="#E5E7EB" 
+            BorderBrush="{DynamicResource BorderBrush}" 
             BorderThickness="1">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.1" Color="#000000"/>
+            <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.3" Color="#000000"/>
         </Border.Effect>
         
         <!-- Viewbox makes content scale with window size -->
@@ -113,20 +113,20 @@
                 <Grid Grid.Column="0" Width="24" Height="24" Margin="5,0,0,0"
                       Cursor="Hand" MouseLeftButtonDown="Circle_Click"
                       ToolTip="Click to Pause/Resume">
-                    <Ellipse Stroke="#E5E7EB" StrokeThickness="2" Fill="Transparent"/>
+                    <Ellipse Stroke="{DynamicResource BorderBrush}" StrokeThickness="2" Fill="Transparent"/>
                     <Ellipse x:Name="ProgressArcFill" 
-                             Stroke="#9333EA" 
+                             Stroke="{DynamicResource AccentBrush}" 
                              StrokeThickness="2" 
                              Fill="Transparent"
                              StrokeDashArray="0 100"/>
                     <!-- Pause icon: just two vertical bars -->
                     <Canvas x:Name="PauseIconCanvas" Width="10" Height="12" 
                             HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <Rectangle x:Name="PauseBar1" Width="3" Height="10" Fill="#6B7280" Canvas.Left="1" Canvas.Top="1"/>
-                        <Rectangle x:Name="PauseBar2" Width="3" Height="10" Fill="#6B7280" Canvas.Left="6" Canvas.Top="1"/>
+                        <Rectangle x:Name="PauseBar1" Width="3" Height="10" Fill="{DynamicResource TextSecondaryBrush}" Canvas.Left="1" Canvas.Top="1"/>
+                        <Rectangle x:Name="PauseBar2" Width="3" Height="10" Fill="{DynamicResource TextSecondaryBrush}" Canvas.Left="6" Canvas.Top="1"/>
                     </Canvas>
                     <!-- Play icon (hidden by default) -->
-                    <Polygon x:Name="PlayIcon" Points="0,0 0,10 8,5" Fill="#6B7280" 
+                    <Polygon x:Name="PlayIcon" Points="0,0 0,10 8,5" Fill="{DynamicResource TextSecondaryBrush}" 
                              HorizontalAlignment="Center" VerticalAlignment="Center"
                              Visibility="Collapsed" Margin="2,0,0,0"/>
                 </Grid>
@@ -137,7 +137,7 @@
                            Text="25:00" 
                            FontSize="17" 
                            FontWeight="Bold" 
-                           Foreground="#1F2937"
+                           Foreground="{DynamicResource TextPrimaryBrush}"
                            FontFamily="Consolas"
                            VerticalAlignment="Center"
                            HorizontalAlignment="Left"

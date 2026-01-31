@@ -102,7 +102,7 @@ public class ForegroundAppTracker : IDisposable
             _winEventDelegate,
             0,
             0,
-            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+            WINEVENT_OUTOFCONTEXT); // Removed WINEVENT_SKIPOWNPROCESS to track self
 
         if (_eventHook == IntPtr.Zero)
         {
@@ -184,6 +184,15 @@ public class ForegroundAppTracker : IDisposable
 
     private void RaiseForegroundChanged(string appName, int processId, string? windowTitle, IntPtr windowHandle)
     {
+        // Special case: if this is our own process OR the app name is our executable
+        // Ensure we identify as "Focus Flow"
+        if (processId == Environment.ProcessId || 
+            appName.Equals("ScreenTimeTracker", StringComparison.OrdinalIgnoreCase) ||
+            appName.Equals("ScreenTimeTracker.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            appName = "Focus Flow";
+        }
+
         // Get the executable path
         var appPath = _processResolver.GetExecutablePath(processId);
 

@@ -32,5 +32,26 @@
     <Color x:Key="BarActiveColorEnd">#7E22CE</Color>
     <Color x:Key="BarInactiveColorStart">#E9D5FF</Color>
     <Color x:Key="BarInactiveColorEnd">#D8B4FE</Color>
+
+    <!-- Category Colors (Attractive & Distinguishable for Light Theme) -->
+    <Color x:Key="CategoryProductivityColor">#10B981</Color>    <!-- Emerald-500 -->
+    <Color x:Key="CategoryEntertainmentColor">#8B5CF6</Color>   <!-- Violet-500 -->
+    <Color x:Key="CategoryCommunicationColor">#3B82F6</Color>   <!-- Blue-500 -->
+    <Color x:Key="CategoryGamingColor">#F43F5E</Color>          <!-- Rose-500 -->
+    <Color x:Key="CategoryBrowsingColor">#0EA5E9</Color>        <!-- Sky-500 -->
+    <Color x:Key="CategorySocialColor">#EC4899</Color>          <!-- Pink-500 -->
+    <Color x:Key="CategoryShoppingColor">#F59E0B</Color>        <!-- Amber-500 -->
+    <Color x:Key="CategorySystemColor">#64748B</Color>          <!-- Slate-500 -->
+    <Color x:Key="CategoryOtherColor">#71717A</Color>           <!-- Zinc-500 -->
+
+    <SolidColorBrush x:Key="CategoryProductivityBrush" Color="{StaticResource CategoryProductivityColor}"/>
+    <SolidColorBrush x:Key="CategoryEntertainmentBrush" Color="{StaticResource CategoryEntertainmentColor}"/>
+    <SolidColorBrush x:Key="CategoryCommunicationBrush" Color="{StaticResource CategoryCommunicationColor}"/>
+    <SolidColorBrush x:Key="CategoryGamingBrush" Color="{StaticResource CategoryGamingColor}"/>
+    <SolidColorBrush x:Key="CategoryBrowsingBrush" Color="{StaticResource CategoryBrowsingColor}"/>
+    <SolidColorBrush x:Key="CategorySocialBrush" Color="{StaticResource CategorySocialColor}"/>
+    <SolidColorBrush x:Key="CategoryShoppingBrush" Color="{StaticResource CategoryShoppingColor}"/>
+    <SolidColorBrush x:Key="CategorySystemBrush" Color="{StaticResource CategorySystemColor}"/>
+    <SolidColorBrush x:Key="CategoryOtherBrush" Color="{StaticResource CategoryOtherColor}"/>
     
 </ResourceDictionary>

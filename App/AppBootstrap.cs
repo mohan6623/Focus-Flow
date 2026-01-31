@@ -298,7 +298,7 @@ public class AppBootstrap : IDisposable
         
         if (_dashboardWindow == null || !_dashboardWindow.IsLoaded)
         {
-            _dashboardWindow = new DashboardWindow(_aggregationService, _systemTimeService, _trayIconManager!, _focusService, _appBlockerService, _foregroundTracker, _themeManager, _streakService);
+            _dashboardWindow = new DashboardWindow(_aggregationService, _systemTimeService, _trayIconManager!, _focusService, _appBlockerService, _foregroundTracker, _themeManager, _streakService, _categoryService);
             _dashboardWindow.Closed += (s, e) => _dashboardWindow = null;
         }
 

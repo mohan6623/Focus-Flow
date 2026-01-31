@@ -2,137 +2,316 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Set Focus Duration"
-        Width="300" Height="220"
+        Width="340" Height="480"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize">
 
-    <Border Background="#FFFFFF" 
+    <Border Background="{DynamicResource CardBrush}" 
             CornerRadius="16" 
-            BorderBrush="#E5E7EB" 
+            BorderBrush="{DynamicResource BorderBrush}" 
             BorderThickness="1"
             Padding="24">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.12" Color="#000000"/>
+            <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.3" Color="#000000"/>
         </Border.Effect>
         
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/> <!-- Title + Close -->
+                <RowDefinition Height="*"/>    <!-- Content (Step 1 or Step 2) -->
+                <RowDefinition Height="Auto"/> <!-- Navigation Button -->
             </Grid.RowDefinitions>
 
-            <!-- Title -->
-            <TextBlock Grid.Row="0" 
-                       Text="Focus Duration" 
-                       FontSize="18" 
-                       FontWeight="Bold" 
-                       Foreground="#1F2937"
-                       HorizontalAlignment="Center"
-                       Margin="0,0,0,20"/>
-
-            <!-- Preset Buttons -->
-            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,16">
-                <Button x:Name="Btn25" Content="25m" Width="60" Height="38" Margin="4,0" 
-                        Background="#F3F4F6" Foreground="#1F2937" BorderThickness="0"
-                        Click="Preset_Click" Tag="25" Cursor="Hand">
+            <!-- 1. Header (Title + Close) -->
+            <Grid Grid.Row="0" Margin="0,0,0,20">
+                <TextBlock x:Name="TxtTitle" 
+                           Text="Focus Session" 
+                           FontSize="18" 
+                           FontWeight="Bold" 
+                           Foreground="{DynamicResource TextPrimaryBrush}"
+                           HorizontalAlignment="Center"/>
+                           
+                <Button x:Name="BtnClose"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Width="24" Height="24"
+                        Background="Transparent"
+                        Foreground="{DynamicResource TextSecondaryBrush}"
+                        BorderThickness="0"
+                        Cursor="Hand"
+                        Click="Close_Click"
+                        Content="✕"
+                        FontWeight="Bold"
+                        FontSize="14">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
-                            <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="10" Padding="8,6">
+                            <Border Background="{TemplateBinding Background}" CornerRadius="12">
                                 <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="border" Property="Background" Value="#E9D5FF"/>
-                                    <Setter Property="Foreground" Value="#9333EA"/>
+                                    <Setter Property="Background" Value="{DynamicResource BgBrush}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/>
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Button.Template>
                 </Button>
-                <Button x:Name="Btn45" Content="45m" Width="60" Height="38" Margin="4,0"
-                        Background="#F3F4F6" Foreground="#1F2937" BorderThickness="0"
-                        Click="Preset_Click" Tag="45" Cursor="Hand">
-                    <Button.Template>
-                        <ControlTemplate TargetType="Button">
-                            <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="10" Padding="8,6">
-                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="border" Property="Background" Value="#E9D5FF"/>
-                                    <Setter Property="Foreground" Value="#9333EA"/>
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Button.Template>
-                </Button>
-                <Button x:Name="Btn60" Content="60m" Width="60" Height="38" Margin="4,0"
-                        Background="#F3F4F6" Foreground="#1F2937" BorderThickness="0"
-                        Click="Preset_Click" Tag="60" Cursor="Hand">
-                    <Button.Template>
-                        <ControlTemplate TargetType="Button">
-                            <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="10" Padding="8,6">
-                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="border" Property="Background" Value="#E9D5FF"/>
-                                    <Setter Property="Foreground" Value="#9333EA"/>
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Button.Template>
-                </Button>
-            </StackPanel>
+            </Grid>
 
-            <!-- Custom Input -->
-            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,20">
-                <TextBox x:Name="TxtCustomMinutes" 
-                         Width="70" Height="36" 
-                         Text="25"
-                         FontSize="16"
-                         TextAlignment="Center"
-                         Background="#F9FAFB"
-                         Foreground="#1F2937"
-                         BorderBrush="#E5E7EB"
-                         BorderThickness="1"
-                         VerticalContentAlignment="Center">
-                    <TextBox.Resources>
-                        <Style TargetType="Border">
-                            <Setter Property="CornerRadius" Value="8"/>
-                        </Style>
-                    </TextBox.Resources>
-                </TextBox>
-                <TextBlock Text="minutes" 
-                           Foreground="#6B7280" 
-                           VerticalAlignment="Center"
-                           Margin="10,0,0,0"/>
-            </StackPanel>
+            <!-- 2. Content Area -->
+            <Grid Grid.Row="1">
+                <!-- Step 1: Duration Selection -->
+                <StackPanel x:Name="Step1Panel" Visibility="Visible">
+                    <!-- Focus Duration -->
+                    <TextBlock Text="Focus Duration" 
+                               FontSize="14" 
+                               FontWeight="SemiBold" 
+                               Foreground="{DynamicResource TextPrimaryBrush}" 
+                               Margin="0,0,0,12"/>
+                    
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,28">
+                        <!-- Presets -->
+                        <Button x:Name="Btn25" Content="25m" Width="55" Height="36" Margin="0,0,8,0" 
+                                Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextSecondaryBrush}" BorderThickness="0"
+                                Click="Preset_Click" Tag="25" Cursor="Hand">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="8" Padding="0">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                        <Button x:Name="Btn45" Content="45m" Width="55" Height="36" Margin="0,0,8,0"
+                                Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextSecondaryBrush}" BorderThickness="0"
+                                Click="Preset_Click" Tag="45" Cursor="Hand">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="8" Padding="0">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                        <Button x:Name="Btn60" Content="60m" Width="55" Height="36" Margin="0,0,12,0"
+                                Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextSecondaryBrush}" BorderThickness="0"
+                                Click="Preset_Click" Tag="60" Cursor="Hand">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="8" Padding="0">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                        
+                        <!-- Custom -->
+                        <TextBox x:Name="TxtCustomMinutes" 
+                                 Width="50" Height="36" 
+                                 Text="25"
+                                 FontSize="14"
+                                 TextAlignment="Center"
+                                 Background="{DynamicResource BgBrush}"
+                                 Foreground="{DynamicResource TextPrimaryBrush}"
+                                 BorderBrush="{DynamicResource BorderBrush}"
+                                 BorderThickness="1"
+                                 VerticalContentAlignment="Center"
+                                 CaretBrush="{DynamicResource TextPrimaryBrush}"
+                                 TextChanged="CustomDuration_TextChanged">
+                            <TextBox.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="8"/>
+                                </Style>
+                            </TextBox.Resources>
+                        </TextBox>
+                        <TextBlock Text="m" 
+                                   Foreground="{DynamicResource TextSecondaryBrush}" 
+                                   VerticalAlignment="Center"
+                                   Margin="4,0,0,0"/>
+                    </StackPanel>
 
-            <!-- Start Button -->
-            <Button Grid.Row="3" 
-                    x:Name="BtnStart"
-                    Height="42"
-                    Background="#9333EA"
+                    <!-- Break Duration with Circular Dial -->
+                    <TextBlock Text="Break Duration" 
+                               FontSize="14" 
+                               FontWeight="SemiBold" 
+                               Foreground="{DynamicResource TextPrimaryBrush}" 
+                               Margin="0,0,0,16"/>
+                    
+                    <!-- Circular Dial -->
+                    <Grid HorizontalAlignment="Center" Margin="0,0,0,8">
+                        <Canvas x:Name="DialCanvas" 
+                                Width="180" Height="180"
+                                MouseLeftButtonDown="Dial_MouseDown"
+                                MouseMove="Dial_MouseMove"
+                                MouseLeftButtonUp="Dial_MouseUp"
+                                MouseLeave="Dial_MouseLeave"
+                                Cursor="Hand">
+                            <!-- Background Circle -->
+                            <Ellipse Width="180" Height="180" 
+                                     Stroke="{DynamicResource BorderBrush}" 
+                                     StrokeThickness="12"
+                                     Fill="Transparent"/>
+                            
+                            <!-- Progress Arc (drawn in code-behind) -->
+                            <Path x:Name="DialArc" 
+                                  Stroke="{DynamicResource AccentBrush}" 
+                                  StrokeThickness="12"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"/>
+                            
+                            <!-- Dial Knob -->
+                            <Ellipse x:Name="DialKnob" 
+                                     Width="28" Height="28" 
+                                     Fill="{DynamicResource AccentBrush}"
+                                     Stroke="White"
+                                     StrokeThickness="3">
+                                <Ellipse.Effect>
+                                    <DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.3"/>
+                                </Ellipse.Effect>
+                            </Ellipse>
+                            
+                            <!-- Center Display -->
+                            <Border Canvas.Left="40" Canvas.Top="40" Width="100" Height="100"
+                                    Background="Transparent">
+                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                    <TextBlock x:Name="TxtBreakDisplay" 
+                                               Text="5" 
+                                               FontSize="36" 
+                                               FontWeight="Bold" 
+                                               Foreground="{DynamicResource TextPrimaryBrush}"
+                                               HorizontalAlignment="Center"/>
+                                    <TextBlock Text="min" 
+                                               FontSize="14" 
+                                               Foreground="{DynamicResource TextSecondaryBrush}"
+                                               HorizontalAlignment="Center"
+                                               Margin="0,-4,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </Canvas>
+                    </Grid>
+                    
+                    <TextBlock Text="Drag the dial to set break time" 
+                               FontSize="12" 
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               HorizontalAlignment="Center"
+                               Margin="0,8,0,0"/>
+                </StackPanel>
+
+                <!-- Step 2: Focus Intent -->
+                <StackPanel x:Name="Step2Panel" Visibility="Collapsed" VerticalAlignment="Center">
+                    <TextBlock Text="What's the one thing?" 
+                               FontSize="20" 
+                               FontWeight="SemiBold" 
+                               Foreground="{DynamicResource TextPrimaryBrush}" 
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,8"/>
+                    
+                    <TextBlock Text="Focus on a single task for this session" 
+                               FontSize="13" 
+                               Foreground="{DynamicResource TextSecondaryBrush}" 
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,24"/>
+                               
+                    <TextBox x:Name="TxtFocusIntent"
+                             Height="48"
+                             FontSize="15"
+                             Padding="16,0"
+                             Background="{DynamicResource BgBrush}"
+                             Foreground="{DynamicResource TextPrimaryBrush}"
+                             BorderBrush="{DynamicResource BorderBrush}"
+                             BorderThickness="1"
+                             VerticalContentAlignment="Center"
+                             CaretBrush="{DynamicResource TextPrimaryBrush}">
+                        <TextBox.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="12"/>
+                            </Style>
+                        </TextBox.Resources>
+                    </TextBox>
+                    
+                    <!-- Summary of selections -->
+                    <Border Background="{DynamicResource BgBrush}" 
+                            CornerRadius="10" 
+                            Padding="16,12" 
+                            Margin="0,24,0,0">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,8">
+                                <TextBlock Text="Focus time" 
+                                           FontSize="13" 
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                <TextBlock x:Name="TxtSummaryFocus" 
+                                           Text="25 minutes" 
+                                           FontSize="13" 
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextPrimaryBrush}"
+                                           HorizontalAlignment="Right"/>
+                            </Grid>
+                            <Grid>
+                                <TextBlock Text="Break time" 
+                                           FontSize="13" 
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                <TextBlock x:Name="TxtSummaryBreak" 
+                                           Text="5 minutes" 
+                                           FontSize="13" 
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextPrimaryBrush}"
+                                           HorizontalAlignment="Right"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                    
+                    <!-- Back button -->
+                    <Button x:Name="BtnBack"
+                            Content="Back"
+                            HorizontalAlignment="Left"
+                            Margin="0,20,0,0"
+                            Background="Transparent"
+                            Foreground="{DynamicResource TextSecondaryBrush}"
+                            BorderThickness="0"
+                            Cursor="Hand"
+                            Click="Back_Click"
+                            FontSize="13">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&lt;" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                    <ContentPresenter VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <!-- 3. Navigation Button -->
+            <Button Grid.Row="2" 
+                    x:Name="BtnNext"
+                    Height="48"
+                    Margin="0,16,0,0"
+                    Background="{DynamicResource AccentBrush}"
                     Foreground="White"
                     FontWeight="SemiBold"
-                    FontSize="14"
+                    FontSize="15"
                     BorderThickness="0"
                     Cursor="Hand"
-                    Click="Start_Click">
+                    Click="Next_Click">
                 <Button.Template>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="10" Padding="16,10">
-                            <TextBlock Text="Start Focus" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                        <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="12" Padding="16,10">
+                            <TextBlock x:Name="btnText" Text="Next" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="SemiBold"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#7C3AED"/>
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource AccentLightBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
