@@ -403,6 +403,72 @@ public class UsageRepository : IDisposable
     }
 
     /// <summary>
+    /// Gets all stored app categories (both learned and overridden).
+    /// Used to pre-populate cache at startup.
+    /// </summary>
+    public Dictionary<string, string> GetAllAppCategories()
+    {
+        EnsureInitialized();
+        var results = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT app_name, category FROM app_categories";
+
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                var appName = reader.GetString(0);
+                var category = reader.GetString(1);
+                results[appName] = category;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to get all app categories: {ex.Message}");
+        }
+
+        return results;
+    }
+    
+    /// <summary>
+    /// Gets only user-overridden app categories (is_user_override = 1).
+    /// These take precedence over hardcoded defaults.
+    /// </summary>
+    public Dictionary<string, string> GetUserOverrideCategories()
+    {
+        EnsureInitialized();
+        var results = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT app_name, category FROM app_categories WHERE is_user_override = 1";
+
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                var appName = reader.GetString(0);
+                var category = reader.GetString(1);
+                results[appName] = category;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to get user override categories: {ex.Message}");
+        }
+
+        return results;
+    }
+
+    /// <summary>
     /// Sets a category for an app (user override).
     /// </summary>
     public void SetAppCategory(string appName, string category, bool isUserOverride = false)

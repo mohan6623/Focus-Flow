@@ -85,6 +85,12 @@ public partial class DashboardWindow : Window
             _foregroundTracker.CheckCurrentForeground();
         };
         
+        // Force refresh category totals when window is activated
+        Activated += (s, e) => {
+            _categoryUpdateCounter = 0; // Force immediate update on next RefreshData
+            UpdateCategoryLegendAsync(); // Also trigger async update immediately
+        };
+        
         // Debug: Listen to foreground changes
         _foregroundTracker.ForegroundChanged += (s, e) =>
         {
@@ -102,6 +108,14 @@ public partial class DashboardWindow : Window
         // Quick Stats only - called every second by timer
         // Do NOT call UpdateDailyReport here - it blocks UI
         UpdateStats();
+        
+        // Update category legend every 10 seconds (lightweight with cache)
+        _categoryUpdateCounter++;
+        if (_categoryUpdateCounter >= 10)
+        {
+            _categoryUpdateCounter = 0;
+            UpdateCategoryLegendAsync();
+        }
     }
 
     private async void UpdateStats()
@@ -259,8 +273,22 @@ public partial class DashboardWindow : Window
 
         if (totalSeconds <= 0) totalSeconds = 1; // Avoid division by zero
 
-        // Sort by time desc
-        var topApps = stats.OrderByDescending(s => s.TotalTime).Take(8).ToList(); // Show top 8
+        // System processes to exclude from display
+        var systemProcesses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "ShellHost", "ShellExperienceHost", "SearchHost", "ApplicationFrameHost",
+            "PickerHost", "LockApp", "StartMenuExperienceHost", "TextInputHost",
+            "SystemSettings", "explorer", "dwm", "csrss", "smss", "wininit",
+            "services", "lsass", "svchost", "taskhostw", "sihost", "fontdrvhost",
+            "RuntimeBroker", "dllhost", "conhost", "ctfmon", "SecurityHealthSystray",
+            "SearchApp", "SearchUI", "Widgets", "WidgetService", "CompPkgSrv"
+        };
+
+        // Dynamic threshold: show apps with 30+ seconds of usage, sorted by time
+        var topApps = stats
+            .Where(s => s.TotalTime.TotalSeconds >= 30 && !systemProcesses.Contains(s.AppName))
+            .OrderByDescending(s => s.TotalTime)
+            .ToList();
 
         foreach (var app in topApps)
         {
@@ -402,6 +430,9 @@ public partial class DashboardWindow : Window
     }
 
     private bool _isUpdatingGraph = false;
+    private Dictionary<string, TimeSpan>? _cachedCategoryTotals = null;
+    private DateOnly _cachedCategoryDate = default;
+    private int _categoryUpdateCounter = 0;
     
     private void UpdateDailyReport()
     {
@@ -456,7 +487,7 @@ public partial class DashboardWindow : Window
                 barGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1 - pct, GridUnitType.Star) });
                 barGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(pct, GridUnitType.Star) });
 
-                // Simple solid gradient bar (FAST - no category lookup)
+                // Simple gradient bar - no expensive category lookup per day
                 var accentLight = GetColorResource("AccentLightColor", Color.FromRgb(233, 213, 255));
                 var accent = GetColorResource("AccentColor", Color.FromRgb(147, 51, 234));
                 var inactiveStart = GetColorResource("BarInactiveColorStart", Color.FromRgb(233, 213, 255));
@@ -465,14 +496,8 @@ public partial class DashboardWindow : Window
                 var bar = new Border
                 {
                     Background = time.TotalSeconds > 0 
-                        ? new LinearGradientBrush(
-                            accentLight, 
-                            accent, 
-                            90)
-                        : new LinearGradientBrush(
-                            inactiveStart, 
-                            inactiveEnd, 
-                            90),
+                        ? new LinearGradientBrush(accentLight, accent, 90)
+                        : new LinearGradientBrush(inactiveStart, inactiveEnd, 90),
                     CornerRadius = new CornerRadius(8),
                     ToolTip = $"{date:ddd}: {FormatTimeCompact(time)}",
                     Effect = isToday ? new System.Windows.Media.Effects.DropShadowEffect
@@ -520,78 +545,187 @@ public partial class DashboardWindow : Window
                 ? $"{(int)avgTime.TotalHours}h {avgTime.Minutes}m"
                 : $"{avgTime.Minutes}m";
 
-            // Render simple Category Legend (no data - just placeholders for now)
-            CategoryLegendContainer.Children.Clear();
-            CategoryLegendContainer.ColumnDefinitions.Clear();
-            CategoryLegendContainer.RowDefinitions.Clear();
-            
-            // 2x2 grid
-            CategoryLegendContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            CategoryLegendContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            CategoryLegendContainer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            CategoryLegendContainer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            
-            // Fixed 4 categories
-            var fixedCategories = new (string name, int col, int row)[]
+            // Render Category Legend - use cached data if available for today, otherwise compute async
+            if (_cachedCategoryTotals != null && _cachedCategoryDate == today)
             {
-                ("Productivity", 0, 0),
-                ("Entertainment", 1, 0),
-                ("Social", 0, 1),
-                ("Other", 1, 1)
-            };
-            
-            foreach (var (catName, col, row) in fixedCategories)
+                RenderCategoryLegend(_cachedCategoryTotals);
+            }
+            else
             {
-                var legendItem = new StackPanel 
-                { 
-                    Orientation = System.Windows.Controls.Orientation.Horizontal, 
-                    Margin = new Thickness(0, 8, 12, 8) 
-                };
+                // Show placeholder immediately
+                RenderCategoryLegend(new Dictionary<string, TimeSpan>(StringComparer.OrdinalIgnoreCase));
                 
-                var categoryBrushKey = CategoryService.GetCategoryBrushKey(catName);
-                var categoryBrush = GetBrushResource(categoryBrushKey, GetBrushResource("CategoryOtherBrush", Brushes.Gray));
-                var categoryIcon = CategoryService.GetCategoryIcon(catName);
-                
-                var iconGrid = new Grid { Width = 36, Height = 36, Margin = new Thickness(0, 0, 10, 0) };
-                var iconBg = new Border
+                // Compute today's category totals in background (only once)
+                _ = Task.Run(() => GetCategoryTotalsFromStats()).ContinueWith(task =>
                 {
-                    Width = 36,
-                    Height = 36,
-                    CornerRadius = new CornerRadius(18),
-                    Background = categoryBrush,
-                    Opacity = 0.15
-                };
-                var iconEmoji = new TextBlock
-                {
-                    Text = categoryIcon,
-                    FontSize = 16,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-                iconGrid.Children.Add(iconBg);
-                iconGrid.Children.Add(iconEmoji);
-                
-                var categoryNameText = new TextBlock 
-                { 
-                    Text = catName, 
-                    FontSize = 13,
-                    FontWeight = FontWeights.SemiBold,
-                    Foreground = (Brush)FindResource("TextPrimaryBrush"),
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-                
-                legendItem.Children.Add(iconGrid);
-                legendItem.Children.Add(categoryNameText);
-                
-                Grid.SetColumn(legendItem, col);
-                Grid.SetRow(legendItem, row);
-                CategoryLegendContainer.Children.Add(legendItem);
+                    if (task.IsFaulted) return;
+                    
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        _cachedCategoryTotals = task.Result;
+                        _cachedCategoryDate = today;
+                        RenderCategoryLegend(task.Result);
+                    });
+                }, TaskScheduler.Default);
             }
         }
         finally
         {
             _isUpdatingGraph = false;
         }
+    }
+
+    private void RenderCategoryLegend(Dictionary<string, TimeSpan> categoryTotals)
+    {
+        CategoryLegendContainer.Children.Clear();
+        CategoryLegendContainer.ColumnDefinitions.Clear();
+        CategoryLegendContainer.RowDefinitions.Clear();
+
+        // 2x2 grid
+        CategoryLegendContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        CategoryLegendContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        CategoryLegendContainer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        CategoryLegendContainer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        // Fixed 4 categories
+        var fixedCategories = new (string name, int col, int row)[]
+        {
+            ("Productivity", 0, 0),
+            ("Entertainment", 1, 0),
+            ("Social", 0, 1),
+            ("Other", 1, 1)
+        };
+
+        foreach (var (catName, col, row) in fixedCategories)
+        {
+            var legendItem = new StackPanel
+            {
+                Orientation = System.Windows.Controls.Orientation.Horizontal,
+                Margin = new Thickness(0, 8, 12, 8)
+            };
+
+            var categoryBrushKey = CategoryService.GetCategoryBrushKey(catName);
+            var categoryBrush = GetBrushResource(categoryBrushKey, GetBrushResource("CategoryOtherBrush", Brushes.Gray));
+            var categoryIcon = CategoryService.GetCategoryIcon(catName);
+
+            var iconGrid = new Grid { Width = 36, Height = 36, Margin = new Thickness(0, 0, 10, 0) };
+            var iconBg = new Border
+            {
+                Width = 36,
+                Height = 36,
+                CornerRadius = new CornerRadius(18),
+                Background = categoryBrush,
+                Opacity = 0.15
+            };
+            var iconEmoji = new TextBlock
+            {
+                Text = categoryIcon,
+                FontSize = 16,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            iconGrid.Children.Add(iconBg);
+            iconGrid.Children.Add(iconEmoji);
+
+            var categoryNameText = new TextBlock
+            {
+                Text = catName,
+                FontSize = 13,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = (Brush)FindResource("TextPrimaryBrush"),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            var categoryTime = categoryTotals.TryGetValue(catName, out var time) ? time : TimeSpan.Zero;
+            var categoryTimeText = new TextBlock
+            {
+                Text = FormatTimeCompact(categoryTime),
+                FontSize = 12,
+                Foreground = (Brush)FindResource("TextSecondaryBrush"),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(8, 0, 0, 0)
+            };
+
+            legendItem.Children.Add(iconGrid);
+            legendItem.Children.Add(categoryNameText);
+            legendItem.Children.Add(categoryTimeText);
+
+            Grid.SetColumn(legendItem, col);
+            Grid.SetRow(legendItem, row);
+            CategoryLegendContainer.Children.Add(legendItem);
+        }
+    }
+
+    /// <summary>
+    /// Fast category totals using in-memory stats only (no database query).
+    /// Category lookups are instant due to pre-populated cache in CategoryService.
+    /// </summary>
+    private Dictionary<string, TimeSpan> GetCategoryTotalsFromStats()
+    {
+        var totals = new Dictionary<string, TimeSpan>(StringComparer.OrdinalIgnoreCase);
+        var stats = _aggregationService.GetTodayStats();
+        
+        foreach (var stat in stats)
+        {
+            var category = ResolveCategory(stat.AppName, stat.WebsiteDomain);
+            AddCategoryTime(totals, category, stat.TotalTime);
+        }
+
+        return totals;
+    }
+    
+    /// <summary>
+    /// Updates category legend asynchronously.
+    /// Lightweight because CategoryService uses pre-populated cache.
+    /// </summary>
+    private void UpdateCategoryLegendAsync()
+    {
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        
+        // Invalidate cache on date change
+        if (_cachedCategoryDate != today)
+        {
+            _cachedCategoryTotals = null;
+        }
+        
+        // Compute on background thread (instant due to cached category lookups)
+        _ = Task.Run(() => GetCategoryTotalsFromStats()).ContinueWith(task =>
+        {
+            if (task.IsFaulted) return;
+            
+            Dispatcher.BeginInvoke(() =>
+            {
+                _cachedCategoryTotals = task.Result;
+                _cachedCategoryDate = today;
+                RenderCategoryLegend(task.Result);
+            });
+        }, TaskScheduler.Default);
+    }
+
+    private string ResolveCategory(string appName, string? websiteDomain)
+    {
+        if (!string.IsNullOrWhiteSpace(websiteDomain))
+        {
+            return _categoryService.GetWebsiteCategory(websiteDomain);
+        }
+
+        return _categoryService.GetCategory(appName);
+    }
+
+    private static void AddCategoryTime(IDictionary<string, TimeSpan> totals, string category, TimeSpan duration)
+    {
+        if (string.IsNullOrWhiteSpace(category))
+        {
+            category = "Other";
+        }
+
+        if (!totals.TryGetValue(category, out var current))
+        {
+            totals[category] = duration;
+            return;
+        }
+
+        totals[category] = current + duration;
     }
 
     private string FormatTime(TimeSpan t)

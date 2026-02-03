@@ -68,6 +68,37 @@ public class ForegroundAppTracker : IDisposable
     private WinEventDelegate? _winEventDelegate;
     private bool _isRunning;
     private bool _disposed;
+    
+    // System processes that should not be tracked as user activity
+    private static readonly HashSet<string> SystemProcesses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Windows Shell components
+        "ShellHost",
+        "ShellExperienceHost",
+        "StartMenuExperienceHost",
+        "SearchUI",
+        "SearchHost",
+        "SearchApp",
+        "LockApp",
+        "LogonUI",
+        "dwm",  // Desktop Window Manager
+        "csrss",  // Client Server Runtime
+        "winlogon",
+        "svchost",
+        "RuntimeBroker",
+        "SystemSettings",
+        "TextInputHost",
+        "ApplicationFrameHost",  // UWP app host - we track the actual app, not this
+        "sihost",  // Shell Infrastructure Host
+        "PickerHost",
+        "PhoneExperienceHost",
+        "CompPkgSrv",
+        "MicrosoftEdgeUpdate",
+        "dllhost",
+        "conhost",
+        "fontdrvhost",
+        "taskhostw"
+    };
 
     /// <summary>
     /// Raised when the foreground application changes.
@@ -182,8 +213,26 @@ public class ForegroundAppTracker : IDisposable
         }
     }
 
+    /// <summary>
+    /// Checks if the app name is a system process that should not be tracked.
+    /// </summary>
+    private static bool IsSystemProcess(string appName)
+    {
+        if (string.IsNullOrEmpty(appName))
+            return true;
+            
+        return SystemProcesses.Contains(appName);
+    }
+
     private void RaiseForegroundChanged(string appName, int processId, string? windowTitle, IntPtr windowHandle)
     {
+        // Exclude system/shell processes that shouldn't be tracked as user activity
+        if (IsSystemProcess(appName))
+        {
+            Logger.Debug($"Ignoring system process: {appName}");
+            return;
+        }
+        
         // Special case: if this is our own process OR the app name is our executable
         // Ensure we identify as "Focus Flow"
         if (processId == Environment.ProcessId || 
