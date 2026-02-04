@@ -17,7 +17,9 @@ This document tracks bugs, issues, and unexpected behaviors encountered during d
 | **Trk-02** | **Brave Browser Tracking**<br>UI Automation fails to reliably find the address bar in Brave. | Fixed by user. | 2026-02-03 |
 
 | **Trk-03** | **Background vs Foreground**<br>Need to distinguish between app being focused vs just running. | Rectified. | 2026-02-03 |
+| **UI-03** | **Theme Persistence**<br>Theme selection (Light/Dark) resets to default on app restart. | Added `user_settings` table, `ThemeManager` now persists to SQLite. Added System theme option. | 2026-02-03 |
+| **Dat-02** | **Streak History Missing**<br>Weekly bubbles only showed last session date, not full history. | Created `focus_session_history` table. Each focus session now logs its date. Bubbles query actual history. | 2026-02-03 |
 
 ## 🔴 Pending / Known Issues
 
-- [ ] **Theme Persistence**: Theme selection (Light/Dark) resets to default on app restart.
+- [ ] **None currently tracked**

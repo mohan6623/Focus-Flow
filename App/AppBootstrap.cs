@@ -95,9 +95,11 @@ public class AppBootstrap : IDisposable
         // Initialize streak service
         _streakService = new StreakService(_repository);
 
-        // Initialize theme manager
-        _themeManager = new ThemeManager();
-        _themeManager.ApplyTheme(ThemeType.Light);
+        // Initialize theme manager with persistence
+        _themeManager = new ThemeManager(_repository);
+        _themeManager.ApplySelectedTheme(); // Applies saved theme or default
+
+
 
         // Initialize tray
         _trayIconManager = new TrayIconManager();

@@ -81,16 +81,25 @@ public class StreakService
     }
 
     /// <summary>
+    /// Daily focus goal in minutes (default 120).
+    /// </summary>
+    public int DailyGoalMinutes { get; set; } = 120; // TODO: Load from settings
+
+    /// <summary>
     /// Records a completed focus session and updates streak.
     /// </summary>
-    public void RecordSessionCompletion()
+    public void RecordSessionCompletion(double durationSeconds)
     {
         var today = DateOnly.FromDateTime(DateTime.Now);
 
-        // Already completed a session today - no streak change
+        // Always record in history table (allows multiple sessions per day tracking)
+        _repository.RecordFocusSessionDate(today, durationSeconds);
+
+        // Already completed a session today - no streak change needed
         if (_lastSessionDate == today)
         {
             Logger.Debug("Session completed, but streak already recorded for today.");
+            StreakUpdated?.Invoke(this, EventArgs.Empty); // Still notify UI to refresh
             return;
         }
 
@@ -159,5 +168,32 @@ public class StreakService
 
         // At risk - hasn't completed today
         return $"⚠️ Don't lose your {_currentStreak}-day streak!";
+    }
+
+    /// <summary>
+    /// Gets a list of dates in the current week (Mon-Sun) that have completed sessions.
+    /// </summary>
+    public List<DateOnly> GetWeekHistory()
+    {
+        // Get the last 14 days of history (covers any week scenario)
+        var history = _repository.GetFocusSessionHistory(14);
+        return history;
+    }
+
+    /// <summary>
+    /// Checks if a specific date has a completed focus session.
+    /// </summary>
+    public bool HasSessionOnDate(DateOnly date)
+    {
+        var history = _repository.GetFocusSessionHistory(14);
+        return history.Contains(date);
+    }
+
+    /// <summary>
+    /// Gets the total focus duration (in seconds) for a specific date.
+    /// </summary>
+    public double GetFocusTimeForDate(DateOnly date)
+    {
+        return _repository.GetDailyFocusTime(date);
     }
 }

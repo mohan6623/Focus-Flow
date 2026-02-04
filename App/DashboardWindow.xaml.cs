@@ -173,39 +173,35 @@ public partial class DashboardWindow : Window
             StreakDaysGrid.Children.Add(dayLabel);
 
             // 2. Bubble Container
-            bool isCompleted = false;
-            if (streak > 0 && lastSession.HasValue)
-            {
-                var startOfStreak = lastSession.Value.AddDays(-(streak - 1));
-                if (date >= startOfStreak && date <= lastSession.Value)
-                {
-                    isCompleted = true;
-                }
-            }
+            bool hasSession = _streakService.HasSessionOnDate(date);
+            double focusSeconds = _streakService.GetFocusTimeForDate(date);
+            bool isMastered = focusSeconds >= (_streakService.DailyGoalMinutes * 60);
 
             var bubble = new Border
             {
                 Width = 22, Height = 22,
                 CornerRadius = new CornerRadius(11),
                 HorizontalAlignment = HorizontalAlignment.Center,
-                Background = isCompleted 
-                    ? (Brush)FindResource("DangerBrush") // Red for completed streak
-                    : (Brush)FindResource("BorderBrush")
+                Background = isMastered 
+                    ? (Brush)FindResource("DangerBrush") 
+                    : hasSession
+                        ? (Brush)FindResource("AccentBrush")
+                        : (Brush)FindResource("BorderBrush")
             };
             
-            if (isCompleted)
+            if (hasSession)
             {
-                // Checkmark for completed days
-                var check = new TextBlock
+                var content = new TextBlock
                 {
-                    Text = "✓",
-                    FontSize = 12,
+                    Text = isMastered ? "🔥" : "✓",
+                    FontSize = isMastered ? 10 : 12,
                     FontWeight = FontWeights.Bold,
                     Foreground = Brushes.White,
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center
                 };
-                bubble.Child = check;
+                 if (isMastered) content.Margin = new Thickness(0, -1, 0, 0);
+                bubble.Child = content;
             }
 
             bubble.Child = bubble.Child;
@@ -425,7 +421,14 @@ public partial class DashboardWindow : Window
     {
          if (BtnThemeTheme?.Content is TextBlock tb)
          {
-             tb.Text = _themeManager.CurrentTheme == ThemeType.Light ? "🌙" : "☀️";
+             // Show icon based on SELECTED theme (what user chose), not current applied theme
+             tb.Text = _themeManager.SelectedTheme switch
+             {
+                 ThemeType.Light => "🌙",   // Click to go to Dark
+                 ThemeType.Dark => "🖥️",   // Click to go to System
+                 ThemeType.System => "☀️", // Click to go to Light
+                 _ => "🌙"
+             };
          }
     }
 
@@ -869,7 +872,7 @@ public partial class DashboardWindow : Window
             Dispatcher.Invoke(() => {
                 _trayIconManager.EndFocusMode();
                 _focusService.EndFocusSession(completed: true);
-                _streakService.RecordSessionCompletion();
+                _streakService.RecordSessionCompletion(focusWindow.TotalTime.TotalSeconds);
                 FocusProgressCard.Visibility = Visibility.Collapsed;
                 _activeFocusWindow = null;
             });

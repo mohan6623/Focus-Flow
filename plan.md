@@ -167,16 +167,18 @@ Build a lightweight, efficient screen time tracking application that helps users
    - [x] Real-time updates every second
    - [x] Placed below "Total Active Time" in dashboard
 
-5. **Theme Switching (Light/Dark)** ✅
+5. **Theme Switching (Light/Dark/System)** ✅
    - [x] Created ThemeManager service
    - [x] LightTheme.xaml and DarkTheme.xaml resource dictionaries
-   - [x] Toggle button in dashboard header
-   - [ ] Persist theme preference across restarts
+   - [x] Toggle button in dashboard header (cycles Light → Dark → System)
+   - [x] Persist theme preference across restarts (via `user_settings` table)
+   - [x] Added System theme option (follows Windows settings)
 
 6. **Streak Display Widget** ✅
    - [x] Fire emoji with current streak count
    - [x] Weekly bubble visualization (Mon-Sun)
    - [x] Checkmarks for completed days
+   - [x] Streak history persisted to `focus_session_history` table
 
 ---
 
