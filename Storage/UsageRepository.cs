@@ -121,6 +121,14 @@ public class UsageRepository : IDisposable
             // Migration: Add duration to history table
             RunMigration(connection, "ALTER TABLE focus_session_history ADD COLUMN total_duration_seconds INTEGER DEFAULT 0");
 
+            // Migration: Add daily_goal_overrides table for per-day custom goals
+            RunMigration(connection, @"
+                CREATE TABLE IF NOT EXISTS daily_goal_overrides (
+                    date TEXT PRIMARY KEY,
+                    goal_minutes INTEGER NOT NULL
+                )
+            ");
+
             _initialized = true;
             Logger.Info($"Database initialized at: {_databasePath}");
         }
@@ -816,6 +824,83 @@ public class UsageRepository : IDisposable
         return 0;
     }
 
+    #endregion
+
+    #region Daily Goal Overrides
+
+    /// <summary>
+    /// Sets a custom goal for a specific date.
+    /// </summary>
+    public void SetDailyGoalOverride(DateOnly date, int goalMinutes)
+    {
+        EnsureInitialized();
+
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                INSERT INTO daily_goal_overrides (date, goal_minutes)
+                VALUES (@date, @goal)
+                ON CONFLICT(date) DO UPDATE SET goal_minutes = @goal
+            ";
+            command.Parameters.AddWithValue("@date", date.ToString("yyyy-MM-dd"));
+            command.Parameters.AddWithValue("@goal", goalMinutes);
+
+            command.ExecuteNonQuery();
+            Logger.Debug($"Set daily goal override: {date} = {goalMinutes} mins");
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to set daily goal override: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Gets the goal for a specific date, checking override first, then weekday/weekend defaults.
+    /// </summary>
+    public int GetDailyGoal(DateOnly date)
+    {
+        EnsureInitialized();
+
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            // 1. Check for date-specific override
+            using var overrideCmd = connection.CreateCommand();
+            overrideCmd.CommandText = "SELECT goal_minutes FROM daily_goal_overrides WHERE date = @date";
+            overrideCmd.Parameters.AddWithValue("@date", date.ToString("yyyy-MM-dd"));
+            var overrideResult = overrideCmd.ExecuteScalar();
+            if (overrideResult != null && overrideResult != DBNull.Value)
+            {
+                return Convert.ToInt32(overrideResult);
+            }
+
+            // 2. Check for weekday/weekend setting
+            bool isWeekend = date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday;
+            string settingKey = isWeekend ? "goal_weekend_minutes" : "goal_weekday_minutes";
+            
+            var setting = GetSetting(settingKey);
+            if (!string.IsNullOrEmpty(setting) && int.TryParse(setting, out var goalFromSetting))
+            {
+                return goalFromSetting;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to get daily goal: {ex.Message}");
+        }
+
+        // 3. Default: 120 minutes
+        return 120;
+    }
+
+    #endregion
+
     /// <summary>
     /// Gets dates with completed focus sessions in the last N days.
     /// </summary>
@@ -856,8 +941,6 @@ public class UsageRepository : IDisposable
 
         return result;
     }
-
-    #endregion
 
     private void EnsureInitialized()
     {

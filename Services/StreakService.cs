@@ -81,9 +81,18 @@ public class StreakService
     }
 
     /// <summary>
-    /// Daily focus goal in minutes (default 120).
+    /// Gets the daily focus goal in minutes for the specified date.
+    /// Checks override -> weekday/weekend default -> fallback 120.
     /// </summary>
-    public int DailyGoalMinutes { get; set; } = 120; // TODO: Load from settings
+    public int GetDailyGoalMinutes(DateOnly date)
+    {
+        return _repository.GetDailyGoal(date);
+    }
+
+    /// <summary>
+    /// Gets today's daily focus goal in minutes.
+    /// </summary>
+    public int DailyGoalMinutes => GetDailyGoalMinutes(DateOnly.FromDateTime(DateTime.Now));
 
     /// <summary>
     /// Records a completed focus session and updates streak.
