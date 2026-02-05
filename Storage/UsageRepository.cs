@@ -942,6 +942,85 @@ public class UsageRepository : IDisposable
         return result;
     }
 
+    /// <summary>
+    /// Gets focus history for a specific month, including duration and goal for each day.
+    /// Returns list of (date, focusSeconds, goalMinutes) tuples.
+    /// </summary>
+    public List<(DateOnly Date, double FocusSeconds, int GoalMinutes)> GetFocusHistoryForMonth(int year, int month)
+    {
+        EnsureInitialized();
+        var result = new List<(DateOnly Date, double FocusSeconds, int GoalMinutes)>();
+
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            var startDate = new DateOnly(year, month, 1);
+            var endDate = startDate.AddMonths(1).AddDays(-1);
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                SELECT date, total_duration_seconds FROM focus_session_history
+                WHERE date >= @startDate AND date <= @endDate
+                ORDER BY date ASC
+            ";
+            command.Parameters.AddWithValue("@startDate", startDate.ToString("yyyy-MM-dd"));
+            command.Parameters.AddWithValue("@endDate", endDate.ToString("yyyy-MM-dd"));
+
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                var dateStr = reader.GetString(0);
+                var focusSeconds = reader.GetDouble(1);
+                if (DateOnly.TryParse(dateStr, out var parsed))
+                {
+                    var goalMinutes = GetDailyGoal(parsed);
+                    result.Add((parsed, focusSeconds, goalMinutes));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to get focus history for month: {ex.Message}");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Gets total focus time (in seconds) for a specific month.
+    /// </summary>
+    public double GetMonthlyFocusTotal(int year, int month)
+    {
+        EnsureInitialized();
+
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            var startDate = new DateOnly(year, month, 1);
+            var endDate = startDate.AddMonths(1).AddDays(-1);
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                SELECT COALESCE(SUM(total_duration_seconds), 0) FROM focus_session_history
+                WHERE date >= @startDate AND date <= @endDate
+            ";
+            command.Parameters.AddWithValue("@startDate", startDate.ToString("yyyy-MM-dd"));
+            command.Parameters.AddWithValue("@endDate", endDate.ToString("yyyy-MM-dd"));
+
+            var result = command.ExecuteScalar();
+            return result != null && result != DBNull.Value ? Convert.ToDouble(result) : 0;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to get monthly focus total: {ex.Message}");
+            return 0;
+        }
+    }
+
     private void EnsureInitialized()
     {
         if (!_initialized)

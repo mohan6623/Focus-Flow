@@ -205,4 +205,31 @@ public class StreakService
     {
         return _repository.GetDailyFocusTime(date);
     }
+
+    /// <summary>
+    /// Gets focus history for a specific month with daily stats.
+    /// Returns list of (date, focusSeconds, goalMinutes).
+    /// </summary>
+    public List<(DateOnly Date, double FocusSeconds, int GoalMinutes)> GetMonthHistory(int year, int month)
+    {
+        return _repository.GetFocusHistoryForMonth(year, month);
+    }
+
+    /// <summary>
+    /// Gets total focus time (in seconds) for a specific month.
+    /// </summary>
+    public double GetMonthlyFocusSeconds(int year, int month)
+    {
+        return _repository.GetMonthlyFocusTotal(year, month);
+    }
+
+    /// <summary>
+    /// Gets the date when the longest streak was achieved.
+    /// </summary>
+    public DateOnly? GetLongestStreakDate()
+    {
+        // For now, return null as we don't track this yet
+        // Could be enhanced to store in DB when longest streak is updated
+        return _longestStreak > 0 ? _lastSessionDate : null;
+    }
 }

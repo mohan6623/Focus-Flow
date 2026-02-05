@@ -207,31 +207,31 @@
 
                     <!-- Navigation Items -->
                     <StackPanel Grid.Row="1">
-                        <Button Style="{StaticResource NavButtonActiveStyle}">
+                        <Button x:Name="NavDashboard" Style="{StaticResource NavButtonActiveStyle}" Click="NavDashboard_Click">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="📊" FontSize="16" Margin="0,0,12,0"/>
                                 <TextBlock Text="Dashboard" FontSize="14"/>
                             </StackPanel>
                         </Button>
-                        <Button Style="{StaticResource NavButtonStyle}">
+                        <Button x:Name="NavActivityLog" Style="{StaticResource NavButtonStyle}" Click="NavActivityLog_Click">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="📋" FontSize="16" Margin="0,0,12,0"/>
                                 <TextBlock Text="Activity Log" FontSize="14"/>
                             </StackPanel>
                         </Button>
-                        <Button Style="{StaticResource NavButtonStyle}">
+                        <Button x:Name="NavFocusMode" Style="{StaticResource NavButtonStyle}" Click="NavFocusMode_Click">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="🎯" FontSize="16" Margin="0,0,12,0"/>
                                 <TextBlock Text="Focus Mode" FontSize="14"/>
                             </StackPanel>
                         </Button>
-                        <Button Style="{StaticResource NavButtonStyle}">
+                        <Button x:Name="NavStreaks" Style="{StaticResource NavButtonStyle}" Click="NavStreaks_Click">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="🔥" FontSize="16" Margin="0,0,12,0"/>
                                 <TextBlock Text="Streaks" FontSize="14"/>
                             </StackPanel>
                         </Button>
-                        <Button Style="{StaticResource NavButtonStyle}">
+                        <Button x:Name="NavInsights" Style="{StaticResource NavButtonStyle}" Click="NavInsights_Click">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="📈" FontSize="16" Margin="0,0,12,0"/>
                                 <TextBlock Text="Insights" FontSize="14"/>
@@ -326,9 +326,9 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- 2. Main Dashboard Grid -->
+                <!-- 2. Main Dashboard Grid (Named for Navigation Switching) -->
                 <!-- Use 2 Columns -->
-                <Grid Grid.Row="1">
+                <Grid x:Name="DashboardContent" Grid.Row="1">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="5.75*"/>   <!-- Daily Report (Restored slightly) -->
                         <ColumnDefinition Width="3.75*"/>   <!-- Reorganized Stats (Reduced slightly) -->
@@ -564,6 +564,106 @@
                             </Grid>
                         </Border>
                     </Grid>
+                </Grid>
+
+                <!-- 3. Streaks Page Content (Hidden by Default) -->
+                <Grid x:Name="StreaksContent" Grid.Row="1" Visibility="Collapsed">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Margin="0,0,20,20">
+                            <!-- Header -->
+                            <TextBlock Text="Your Streak Journey" FontSize="28" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,8"/>
+                            <TextBlock x:Name="TxtStreakMotivation" Text="Keep building your focus habit!" FontSize="14" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,24"/>
+
+                            <!-- Stats Cards Row -->
+                            <Grid Margin="0,0,0,24">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Current Streak Card -->
+                                <Border Grid.Column="0" Style="{StaticResource CardStyle}" Margin="0,0,12,0">
+                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="16">
+                                        <TextBlock Text="🔥" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                        <TextBlock x:Name="TxtStreaksPageCurrent" Text="0" FontSize="36" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="Current Streak" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Longest Streak Card -->
+                                <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="6,0,6,0">
+                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="16">
+                                        <TextBlock Text="🏆" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                        <TextBlock x:Name="TxtStreaksPageLongest" Text="0" FontSize="36" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="Longest Streak" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Monthly Focus Card -->
+                                <Border Grid.Column="2" Style="{StaticResource CardStyle}" Margin="12,0,0,0">
+                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="16">
+                                        <TextBlock Text="⏱️" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                        <TextBlock x:Name="TxtStreaksPageMonthlyFocus" Text="0h" FontSize="36" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="This Month" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+
+                            <!-- Calendar Section -->
+                            <Border Style="{StaticResource CardStyle}" Padding="20">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/> <!-- Month Navigation -->
+                                        <RowDefinition Height="Auto"/> <!-- Day Headers -->
+                                        <RowDefinition Height="*"/>    <!-- Calendar Days -->
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Month Navigation -->
+                                    <Grid Grid.Row="0" Margin="0,0,0,16">
+                                        <Button x:Name="BtnCalendarPrev" Content="◀" Click="CalendarPrev_Click" HorizontalAlignment="Left" 
+                                                Background="Transparent" BorderThickness="0" Foreground="{DynamicResource TextSecondaryBrush}" 
+                                                FontSize="16" Cursor="Hand" Padding="8,4"/>
+                                        <TextBlock x:Name="TxtCalendarMonth" Text="February 2026" FontSize="18" FontWeight="SemiBold" 
+                                                   Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        <Button x:Name="BtnCalendarNext" Content="▶" Click="CalendarNext_Click" HorizontalAlignment="Right"
+                                                Background="Transparent" BorderThickness="0" Foreground="{DynamicResource TextSecondaryBrush}" 
+                                                FontSize="16" Cursor="Hand" Padding="8,4"/>
+                                    </Grid>
+
+                                    <!-- Day Headers -->
+                                    <Grid Grid.Row="1" Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Sun" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="Mon" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="2" Text="Tue" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="3" Text="Wed" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="4" Text="Thu" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="5" Text="Fri" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="6" Text="Sat" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
+                                    </Grid>
+
+                                    <!-- Calendar Grid (6 rows x 7 cols) -->
+                                    <Grid x:Name="CalendarDaysGrid" Grid.Row="2">
+                                        <!-- Populated dynamically in code-behind -->
+                                    </Grid>
+                                </Grid>
+                            </Border>
+
+                            <!-- Milestones Section -->
+                            <TextBlock Text="Milestones" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,24,0,12"/>
+                            <Grid x:Name="MilestonesGrid">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <!-- Populated dynamically -->
+                            </Grid>
+                        </StackPanel>
+                    </ScrollViewer>
                 </Grid>
             </Grid>
         </Grid>
