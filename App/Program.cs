@@ -46,6 +46,9 @@ internal static class Program
             // Handle system events
             Application.ApplicationExit += OnApplicationExit;
             SystemEvents.SessionEnding += OnSessionEnding;
+            
+            // Handle process exit (catches some force kills)
+            AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
 
             // Create and start application
             _app = new AppBootstrap();
@@ -91,6 +94,12 @@ internal static class Program
     private static void OnSessionEnding(object sender, Microsoft.Win32.SessionEndingEventArgs e)
     {
         Logger.Info($"Session ending: {e.Reason}");
+        _app?.Stop();
+    }
+
+    private static void OnProcessExit(object? sender, EventArgs e)
+    {
+        Logger.Info("Process exit detected - emergency persist");
         _app?.Stop();
     }
 

@@ -95,9 +95,11 @@ public class AppBootstrap : IDisposable
         // Initialize streak service
         _streakService = new StreakService(_repository);
 
-        // Initialize theme manager
-        _themeManager = new ThemeManager();
-        _themeManager.ApplyTheme(ThemeType.Light);
+        // Initialize theme manager with persistence
+        _themeManager = new ThemeManager(_repository);
+        _themeManager.ApplySelectedTheme(); // Applies saved theme or default
+
+
 
         // Initialize tray
         _trayIconManager = new TrayIconManager();
@@ -298,7 +300,7 @@ public class AppBootstrap : IDisposable
         
         if (_dashboardWindow == null || !_dashboardWindow.IsLoaded)
         {
-            _dashboardWindow = new DashboardWindow(_aggregationService, _systemTimeService, _trayIconManager!, _focusService, _appBlockerService, _foregroundTracker, _themeManager, _streakService, _categoryService);
+            _dashboardWindow = new DashboardWindow(_aggregationService, _systemTimeService, _trayIconManager!, _focusService, _appBlockerService, _foregroundTracker, _themeManager, _streakService, _categoryService, _repository);
             _dashboardWindow.Closed += (s, e) => _dashboardWindow = null;
         }
 

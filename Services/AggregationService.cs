@@ -94,6 +94,7 @@ public class AggregationService : IDisposable
 
     /// <summary>
     /// Adds a session to the statistics.
+    /// Immediately persists to prevent data loss on unexpected shutdown.
     /// </summary>
     public void AddSession(UsageSession session)
     {
@@ -113,6 +114,10 @@ public class AggregationService : IDisposable
 
             Logger.Debug($"Added session to {session.AppName}: {session.Duration.TotalSeconds:F1}s");
         }
+
+        // Immediately persist to prevent data loss on unexpected shutdown
+        // This is critical - we don't want to lose any session data
+        PersistNow();
 
         try
         {

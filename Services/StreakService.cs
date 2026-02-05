@@ -81,16 +81,34 @@ public class StreakService
     }
 
     /// <summary>
+    /// Gets the daily focus goal in minutes for the specified date.
+    /// Checks override -> weekday/weekend default -> fallback 120.
+    /// </summary>
+    public int GetDailyGoalMinutes(DateOnly date)
+    {
+        return _repository.GetDailyGoal(date);
+    }
+
+    /// <summary>
+    /// Gets today's daily focus goal in minutes.
+    /// </summary>
+    public int DailyGoalMinutes => GetDailyGoalMinutes(DateOnly.FromDateTime(DateTime.Now));
+
+    /// <summary>
     /// Records a completed focus session and updates streak.
     /// </summary>
-    public void RecordSessionCompletion()
+    public void RecordSessionCompletion(double durationSeconds)
     {
         var today = DateOnly.FromDateTime(DateTime.Now);
 
-        // Already completed a session today - no streak change
+        // Always record in history table (allows multiple sessions per day tracking)
+        _repository.RecordFocusSessionDate(today, durationSeconds);
+
+        // Already completed a session today - no streak change needed
         if (_lastSessionDate == today)
         {
             Logger.Debug("Session completed, but streak already recorded for today.");
+            StreakUpdated?.Invoke(this, EventArgs.Empty); // Still notify UI to refresh
             return;
         }
 
@@ -159,5 +177,59 @@ public class StreakService
 
         // At risk - hasn't completed today
         return $"⚠️ Don't lose your {_currentStreak}-day streak!";
+    }
+
+    /// <summary>
+    /// Gets a list of dates in the current week (Mon-Sun) that have completed sessions.
+    /// </summary>
+    public List<DateOnly> GetWeekHistory()
+    {
+        // Get the last 14 days of history (covers any week scenario)
+        var history = _repository.GetFocusSessionHistory(14);
+        return history;
+    }
+
+    /// <summary>
+    /// Checks if a specific date has a completed focus session.
+    /// </summary>
+    public bool HasSessionOnDate(DateOnly date)
+    {
+        var history = _repository.GetFocusSessionHistory(14);
+        return history.Contains(date);
+    }
+
+    /// <summary>
+    /// Gets the total focus duration (in seconds) for a specific date.
+    /// </summary>
+    public double GetFocusTimeForDate(DateOnly date)
+    {
+        return _repository.GetDailyFocusTime(date);
+    }
+
+    /// <summary>
+    /// Gets focus history for a specific month with daily stats.
+    /// Returns list of (date, focusSeconds, goalMinutes).
+    /// </summary>
+    public List<(DateOnly Date, double FocusSeconds, int GoalMinutes)> GetMonthHistory(int year, int month)
+    {
+        return _repository.GetFocusHistoryForMonth(year, month);
+    }
+
+    /// <summary>
+    /// Gets total focus time (in seconds) for a specific month.
+    /// </summary>
+    public double GetMonthlyFocusSeconds(int year, int month)
+    {
+        return _repository.GetMonthlyFocusTotal(year, month);
+    }
+
+    /// <summary>
+    /// Gets the date when the longest streak was achieved.
+    /// </summary>
+    public DateOnly? GetLongestStreakDate()
+    {
+        // For now, return null as we don't track this yet
+        // Could be enhanced to store in DB when longest streak is updated
+        return _longestStreak > 0 ? _lastSessionDate : null;
     }
 }

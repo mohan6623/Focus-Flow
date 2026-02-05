@@ -25,6 +25,7 @@ public partial class DashboardWindow : Window
     private readonly StreakService _streakService;
     private readonly CategoryService _categoryService;
     private readonly ThemeManager _themeManager;
+    private readonly Storage.UsageRepository _repository;
     
     // Active focus session tracking
     private FocusTimerWindow? _activeFocusWindow = null;
@@ -43,7 +44,8 @@ public partial class DashboardWindow : Window
         Tracking.ForegroundAppTracker foregroundTracker, 
         ThemeManager themeManager,
         StreakService streakService,
-        CategoryService categoryService)
+        CategoryService categoryService,
+        Storage.UsageRepository repository)
     {
         InitializeComponent();
         
@@ -56,6 +58,7 @@ public partial class DashboardWindow : Window
         _themeManager = themeManager;
         _streakService = streakService;
         _categoryService = categoryService;
+        _repository = repository;
         
         // Subscribe to streak updates
         _streakService.StreakUpdated += (s, e) => UpdateStreakDisplay();
@@ -132,88 +135,124 @@ public partial class DashboardWindow : Window
     
     private void UpdateStreakDisplay()
     {
+        var today = DateOnly.FromDateTime(DateTime.Now);
         var streak = _streakService.CurrentStreak;
         TxtStreakCount.Text = streak.ToString();
-        
-        // Populate visual bubbles (Current Week: Mon-Sun)
+
+        // Update Today's Progress Text
+        double todayFocusSeconds = _streakService.GetFocusTimeForDate(today);
+        int todayGoalMinutes = _streakService.DailyGoalMinutes;
+        int todayFocusMinutes = (int)(todayFocusSeconds / 60);
+
+        // Format: "1h 30m / 2h 00m"
+        TxtFocusedToday.Text = FormatTimeShort(todayFocusMinutes);
+        TxtGoalTotal.Text = $" / {FormatTimeShort(todayGoalMinutes)}";
+
+        // Update Progress Bar
+        double progressPercent = Math.Min(1.0, todayFocusSeconds / (todayGoalMinutes * 60.0));
+        // Get the parent border's actual width for calculation
+        if (StreakProgressFill.Parent is Border parentBorder)
+        {
+            double maxWidth = parentBorder.ActualWidth > 0 ? parentBorder.ActualWidth : 150;
+            StreakProgressFill.Width = maxWidth * progressPercent;
+        }
+
+        // --- Timeline-Style Bubbles (Today in center, older days flow left) ---
         StreakDaysGrid.Children.Clear();
         StreakDaysGrid.ColumnDefinitions.Clear();
         StreakDaysGrid.RowDefinitions.Clear();
         
-        // Definitions
         StreakDaysGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Labels
         StreakDaysGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Bubbles
         
+        // 7 columns for timeline: 3 past days | TODAY | 3 future days
         for (int i = 0; i < 7; i++)
             StreakDaysGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        var today = DateOnly.FromDateTime(DateTime.Now);
-        // Find Monday of current week
-        int daysSinceMonday = ((int)today.DayOfWeek == 0) ? 6 : (int)today.DayOfWeek - 1;
-        var startOfWeek = today.AddDays(-daysSinceMonday);
-
-        var lastSession = _streakService.LastSessionDate; 
-        
+        // Center column (index 3) = Today
+        // Columns 0-2 = Past days (oldest to left)
+        // Columns 4-6 = Future days (reserved, show empty)
         for (int i = 0; i < 7; i++)
         {
-            var date = startOfWeek.AddDays(i);
-            
-            // 1. Label (Day of Week)
+            int daysOffset = i - 3; // -3, -2, -1, 0, +1, +2, +3
+            var date = today.AddDays(daysOffset);
+            bool isFuture = daysOffset > 0;
+            bool isToday = daysOffset == 0;
+
+            // 1. Label (Date Number)
+            // Theme-aware brushes
+            var textPrimary = (Brush)FindResource("TextPrimaryBrush");
+            var textSecondary = (Brush)FindResource("TextSecondaryBrush");
+            var accent = (Brush)FindResource("AccentBrush");
+            var border = (Brush)FindResource("BorderBrush");
+            var bg = (Brush)FindResource("BgBrush");
+
+            // 1. Label (Date Number)
             var dayLabel = new TextBlock
             {
-                Text = date.DayOfWeek.ToString().Substring(0, 1), // M, T...
-                FontSize = 11, 
-                FontWeight = FontWeights.SemiBold,
-                Foreground = (Brush)FindResource("TextSecondaryBrush"),
+                Text = date.Day.ToString(),
+                FontSize = 10,
+                FontWeight = isToday ? FontWeights.Bold : FontWeights.Normal,
+                Foreground = isToday ? accent : textSecondary,
                 HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 0, 0, 8)
+                Margin = new Thickness(0, 0, 0, 6)
             };
             Grid.SetRow(dayLabel, 0);
             Grid.SetColumn(dayLabel, i);
             StreakDaysGrid.Children.Add(dayLabel);
 
-            // 2. Bubble Container
-            bool isCompleted = false;
-            if (streak > 0 && lastSession.HasValue)
-            {
-                var startOfStreak = lastSession.Value.AddDays(-(streak - 1));
-                if (date >= startOfStreak && date <= lastSession.Value)
-                {
-                    isCompleted = true;
-                }
-            }
+            // 2. Bubble
+            bool hasSession = !isFuture && _streakService.HasSessionOnDate(date);
+            double focusSeconds = !isFuture ? _streakService.GetFocusTimeForDate(date) : 0;
+            int goalForDate = _streakService.GetDailyGoalMinutes(date);
+            bool isMastered = focusSeconds >= (goalForDate * 60);
+
+            Brush bubbleBg;
+            if (isFuture)
+                bubbleBg = bg;
+            else if (hasSession) 
+                bubbleBg = accent;
+            else
+                bubbleBg = bg;
 
             var bubble = new Border
             {
-                Width = 22, Height = 22,
-                CornerRadius = new CornerRadius(11),
+                Width = isToday ? 28 : 24,
+                Height = isToday ? 28 : 24,
+                CornerRadius = new CornerRadius(isToday ? 14 : 12),
                 HorizontalAlignment = HorizontalAlignment.Center,
-                Background = isCompleted 
-                    ? (Brush)FindResource("DangerBrush") // Red for completed streak
-                    : (Brush)FindResource("BorderBrush")
+                Background = bubbleBg,
+                BorderThickness = isToday ? new Thickness(1.5) : new Thickness(1),
+                BorderBrush = isToday ? accent : border
+            };
+
+            // Content: Initial or Icon
+            var dayInitial = date.DayOfWeek.ToString().Substring(0, 1);
+            var content = new TextBlock
+            {
+                Text = (hasSession && isMastered && !isFuture) ? "🔥" : dayInitial,
+                FontSize = (hasSession && isMastered && !isFuture) ? 12 : 10,
+                FontWeight = (isToday || hasSession) ? FontWeights.Bold : FontWeights.Normal,
+                Foreground = hasSession ? Brushes.White : textSecondary,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Opacity = hasSession ? 1.0 : 0.6
             };
             
-            if (isCompleted)
-            {
-                // Checkmark for completed days
-                var check = new TextBlock
-                {
-                    Text = "✓",
-                    FontSize = 12,
-                    FontWeight = FontWeights.Bold,
-                    Foreground = Brushes.White,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-                bubble.Child = check;
-            }
-
-            bubble.Child = bubble.Child;
+            if (hasSession && isMastered && !isFuture) content.Margin = new Thickness(0, -1, 0, 0);
+            bubble.Child = content;
 
             Grid.SetRow(bubble, 1);
             Grid.SetColumn(bubble, i);
             StreakDaysGrid.Children.Add(bubble);
         }
+    }
+
+    private string FormatTimeShort(int minutes)
+    {
+        int hours = minutes / 60;
+        int mins = minutes % 60;
+        return hours > 0 ? $"{hours}h {mins:D2}m" : $"{mins}m";
     }
 
     private void UpdateGeneralStats()
@@ -406,6 +445,21 @@ public partial class DashboardWindow : Window
         UpdateAllDynamicResources();
     }
 
+    private void EditGoalButton_Click(object sender, RoutedEventArgs e)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        var dialog = new GoalEditorDialog(_repository, today)
+        {
+            Owner = this
+        };
+        
+        if (dialog.ShowDialog() == true)
+        {
+            // Goal was saved, refresh the streak display
+            UpdateStreakDisplay();
+        }
+    }
+
     private void UpdateAllDynamicResources()
     {
         // WPF DynamicResource usually handles this automatically if the resource dictionary is replaced at the App level.
@@ -425,7 +479,14 @@ public partial class DashboardWindow : Window
     {
          if (BtnThemeTheme?.Content is TextBlock tb)
          {
-             tb.Text = _themeManager.CurrentTheme == ThemeType.Light ? "🌙" : "☀️";
+             // Show icon based on SELECTED theme (what user chose), not current applied theme
+             tb.Text = _themeManager.SelectedTheme switch
+             {
+                 ThemeType.Light => "🌙",   // Click to go to Dark
+                 ThemeType.Dark => "🖥️",   // Click to go to System
+                 ThemeType.System => "☀️", // Click to go to Light
+                 _ => "🌙"
+             };
          }
     }
 
@@ -869,7 +930,7 @@ public partial class DashboardWindow : Window
             Dispatcher.Invoke(() => {
                 _trayIconManager.EndFocusMode();
                 _focusService.EndFocusSession(completed: true);
-                _streakService.RecordSessionCompletion();
+                _streakService.RecordSessionCompletion(focusWindow.TotalTime.TotalSeconds);
                 FocusProgressCard.Visibility = Visibility.Collapsed;
                 _activeFocusWindow = null;
             });
@@ -953,4 +1014,251 @@ public partial class DashboardWindow : Window
         double filledAmount = progress * circumference;
         FocusProgressArc.StrokeDashArray = new DoubleCollection { filledAmount, 100 };
     }
+
+    #region Navigation
+
+    private string _currentPage = "Dashboard";
+    private int _calendarYear;
+    private int _calendarMonth;
+
+    private void NavDashboard_Click(object sender, RoutedEventArgs e) => NavigateTo("Dashboard");
+    private void NavActivityLog_Click(object sender, RoutedEventArgs e) => NavigateTo("ActivityLog");
+    private void NavFocusMode_Click(object sender, RoutedEventArgs e) => NavigateTo("FocusMode");
+    private void NavStreaks_Click(object sender, RoutedEventArgs e) => NavigateTo("Streaks");
+    private void NavInsights_Click(object sender, RoutedEventArgs e) => NavigateTo("Insights");
+
+    private void NavigateTo(string page)
+    {
+        _currentPage = page;
+
+        // Update nav button styles
+        NavDashboard.Style = page == "Dashboard" ? (Style)FindResource("NavButtonActiveStyle") : (Style)FindResource("NavButtonStyle");
+        NavActivityLog.Style = page == "ActivityLog" ? (Style)FindResource("NavButtonActiveStyle") : (Style)FindResource("NavButtonStyle");
+        NavFocusMode.Style = page == "FocusMode" ? (Style)FindResource("NavButtonActiveStyle") : (Style)FindResource("NavButtonStyle");
+        NavStreaks.Style = page == "Streaks" ? (Style)FindResource("NavButtonActiveStyle") : (Style)FindResource("NavButtonStyle");
+        NavInsights.Style = page == "Insights" ? (Style)FindResource("NavButtonActiveStyle") : (Style)FindResource("NavButtonStyle");
+
+        // Toggle content visibility
+        DashboardContent.Visibility = page == "Dashboard" ? Visibility.Visible : Visibility.Collapsed;
+        StreaksContent.Visibility = page == "Streaks" ? Visibility.Visible : Visibility.Collapsed;
+
+        // Refresh page data
+        if (page == "Streaks")
+        {
+            var now = DateTime.Now;
+            _calendarYear = now.Year;
+            _calendarMonth = now.Month;
+            UpdateStreaksPage();
+        }
+    }
+
+    private void UpdateStreaksPage()
+    {
+        // Update stats
+        TxtStreaksPageCurrent.Text = _streakService.CurrentStreak.ToString();
+        TxtStreaksPageLongest.Text = _streakService.LongestStreak.ToString();
+
+        var monthlyFocusSeconds = _streakService.GetMonthlyFocusSeconds(_calendarYear, _calendarMonth);
+        var monthlyHours = monthlyFocusSeconds / 3600.0;
+        TxtStreaksPageMonthlyFocus.Text = monthlyHours >= 1 ? $"{monthlyHours:F1}h" : $"{(monthlyFocusSeconds / 60):F0}m";
+
+        // Update motivation text
+        if (_streakService.CurrentStreak == 0)
+            TxtStreakMotivation.Text = "Start a focus session to begin your streak!";
+        else if (_streakService.HasCompletedToday)
+            TxtStreakMotivation.Text = $"🔥 {_streakService.CurrentStreak} days strong! Keep it going!";
+        else
+            TxtStreakMotivation.Text = $"⚠️ Don't lose your {_streakService.CurrentStreak}-day streak! Focus today!";
+
+        // Update calendar
+        TxtCalendarMonth.Text = new DateTime(_calendarYear, _calendarMonth, 1).ToString("MMMM yyyy");
+        PopulateCalendar();
+        PopulateMilestones();
+    }
+
+    private void CalendarPrev_Click(object sender, RoutedEventArgs e)
+    {
+        _calendarMonth--;
+        if (_calendarMonth < 1)
+        {
+            _calendarMonth = 12;
+            _calendarYear--;
+        }
+        UpdateStreaksPage();
+    }
+
+    private void CalendarNext_Click(object sender, RoutedEventArgs e)
+    {
+        _calendarMonth++;
+        if (_calendarMonth > 12)
+        {
+            _calendarMonth = 1;
+            _calendarYear++;
+        }
+        UpdateStreaksPage();
+    }
+
+    private void PopulateCalendar()
+    {
+        CalendarDaysGrid.Children.Clear();
+        CalendarDaysGrid.RowDefinitions.Clear();
+        CalendarDaysGrid.ColumnDefinitions.Clear();
+
+        // Add 7 columns for days of week
+        for (int i = 0; i < 7; i++)
+            CalendarDaysGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        // Add 6 rows for weeks
+        for (int i = 0; i < 6; i++)
+            CalendarDaysGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(50) });
+
+        var firstDay = new DateOnly(_calendarYear, _calendarMonth, 1);
+        var daysInMonth = DateTime.DaysInMonth(_calendarYear, _calendarMonth);
+        var startDayOfWeek = (int)firstDay.DayOfWeek; // Sunday = 0
+
+        var monthHistory = _streakService.GetMonthHistory(_calendarYear, _calendarMonth);
+        var historyDict = monthHistory.ToDictionary(h => h.Date, h => (h.FocusSeconds, h.GoalMinutes));
+
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        var accent = (Brush)FindResource("AccentBrush");
+        var success = (Brush)FindResource("SuccessBrush");
+        var warning = (Brush)FindResource("WarningBrush");
+        var textSecondary = (Brush)FindResource("TextSecondaryBrush");
+        var textPrimary = (Brush)FindResource("TextPrimaryBrush");
+        var cardBrush = (Brush)FindResource("CardBrush");
+
+        for (int day = 1; day <= daysInMonth; day++)
+        {
+            var date = new DateOnly(_calendarYear, _calendarMonth, day);
+            int col = (startDayOfWeek + day - 1) % 7;
+            int row = (startDayOfWeek + day - 1) / 7;
+
+            bool isFuture = date > today;
+            bool isToday = date == today;
+
+            // Determine status
+            Brush bgBrush = Brushes.Transparent;
+            Brush fgBrush = textSecondary;
+            string tooltip = "";
+
+            if (!isFuture && historyDict.TryGetValue(date, out var data))
+            {
+                var focusMinutes = data.FocusSeconds / 60;
+                if (focusMinutes >= data.GoalMinutes)
+                {
+                    bgBrush = accent; // Goal met - mastered
+                    fgBrush = Brushes.White;
+                    tooltip = $"🔥 Mastered! {focusMinutes:F0}/{data.GoalMinutes}min";
+                }
+                else
+                {
+                    bgBrush = warning; // Session done but < goal
+                    fgBrush = Brushes.White;
+                    tooltip = $"✓ {focusMinutes:F0}/{data.GoalMinutes}min";
+                }
+            }
+            else if (isFuture)
+            {
+                fgBrush = textSecondary;
+            }
+
+            // Create day cell
+            var border = new Border
+            {
+                Background = bgBrush,
+                CornerRadius = new CornerRadius(8),
+                Margin = new Thickness(2),
+                ToolTip = string.IsNullOrEmpty(tooltip) ? null : tooltip
+            };
+
+            if (isToday)
+            {
+                border.BorderBrush = accent;
+                border.BorderThickness = new Thickness(2);
+            }
+
+            var text = new TextBlock
+            {
+                Text = day.ToString(),
+                FontSize = 14,
+                FontWeight = isToday ? FontWeights.Bold : FontWeights.Normal,
+                Foreground = fgBrush,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            border.Child = text;
+            Grid.SetColumn(border, col);
+            Grid.SetRow(border, row);
+            CalendarDaysGrid.Children.Add(border);
+        }
+    }
+
+    private void PopulateMilestones()
+    {
+        MilestonesGrid.Children.Clear();
+
+        var milestones = new[]
+        {
+            (Days: 7, Icon: "🎯", Title: "Week Warrior"),
+            (Days: 30, Icon: "🏆", Title: "Monthly Master"),
+            (Days: 100, Icon: "🌟", Title: "Century Focus")
+        };
+
+        var longestStreak = _streakService.LongestStreak;
+        var accent = (Brush)FindResource("AccentBrush");
+        var textSecondary = (Brush)FindResource("TextSecondaryBrush");
+
+        for (int i = 0; i < milestones.Length; i++)
+        {
+            var m = milestones[i];
+            bool unlocked = longestStreak >= m.Days;
+
+            var card = new Border
+            {
+                Style = (Style)FindResource("CardStyle"),
+                Margin = new Thickness(i == 0 ? 0 : 6, 0, i == 2 ? 0 : 6, 0),
+                Opacity = unlocked ? 1.0 : 0.5
+            };
+
+            var stack = new StackPanel
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(16)
+            };
+
+            stack.Children.Add(new TextBlock
+            {
+                Text = m.Icon,
+                FontSize = 28,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+
+            stack.Children.Add(new TextBlock
+            {
+                Text = m.Title,
+                FontSize = 14,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = unlocked ? accent : textSecondary,
+                HorizontalAlignment = HorizontalAlignment.Center
+            });
+
+            stack.Children.Add(new TextBlock
+            {
+                Text = unlocked ? "Unlocked!" : $"{m.Days} days",
+                FontSize = 11,
+                Foreground = textSecondary,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 4, 0, 0)
+            });
+
+            card.Child = stack;
+            Grid.SetColumn(card, i);
+            MilestonesGrid.Children.Add(card);
+        }
+    }
+
+    #endregion
 }

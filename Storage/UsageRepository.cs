@@ -100,6 +100,35 @@ public class UsageRepository : IDisposable
             // Migration: Add website_domain column to app_usage if it doesn't exist
             RunMigration(connection, "ALTER TABLE app_usage ADD COLUMN website_domain TEXT");
 
+            // Migration: Add user_settings table for theme persistence etc.
+            RunMigration(connection, @"
+                CREATE TABLE IF NOT EXISTS user_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+            ");
+
+            // Migration: Add focus_session_history table for streak weekly bubbles
+            RunMigration(connection, @"
+                CREATE TABLE IF NOT EXISTS focus_session_history (
+                    date TEXT PRIMARY KEY,
+                    sessions_completed INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL
+                )
+            ");
+
+            // Migration: Add duration to history table
+            RunMigration(connection, "ALTER TABLE focus_session_history ADD COLUMN total_duration_seconds INTEGER DEFAULT 0");
+
+            // Migration: Add daily_goal_overrides table for per-day custom goals
+            RunMigration(connection, @"
+                CREATE TABLE IF NOT EXISTS daily_goal_overrides (
+                    date TEXT PRIMARY KEY,
+                    goal_minutes INTEGER NOT NULL
+                )
+            ");
+
             _initialized = true;
             Logger.Info($"Database initialized at: {_databasePath}");
         }
@@ -663,6 +692,332 @@ public class UsageRepository : IDisposable
         catch (Exception ex)
         {
             Logger.Error($"Failed to save streak data: {ex.Message}");
+        }
+    }
+
+    #region User Settings
+
+    /// <summary>
+    /// Gets a user setting value by key.
+    /// </summary>
+    public string? GetSetting(string key)
+    {
+        EnsureInitialized();
+
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT value FROM user_settings WHERE key = @key";
+            command.Parameters.AddWithValue("@key", key);
+
+            var result = command.ExecuteScalar();
+            return result as string;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to get setting '{key}': {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Sets a user setting value.
+    /// </summary>
+    public void SetSetting(string key, string value)
+    {
+        EnsureInitialized();
+
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                INSERT INTO user_settings (key, value, updated_at)
+                VALUES (@key, @value, @updatedAt)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = @value,
+                    updated_at = @updatedAt
+            ";
+            command.Parameters.AddWithValue("@key", key);
+            command.Parameters.AddWithValue("@value", value);
+            command.Parameters.AddWithValue("@updatedAt", DateTime.Now.ToString("o"));
+
+            command.ExecuteNonQuery();
+            Logger.Debug($"Saved setting: {key} = {value}");
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to set setting '{key}': {ex.Message}");
+        }
+    }
+
+    #endregion
+
+    #region Focus Session History
+
+
+    /// <summary>
+    /// Records that a focus session was completed on a specific date.
+    /// </summary>
+    public void RecordFocusSessionDate(DateOnly date, double durationSeconds)
+    {
+        EnsureInitialized();
+
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                INSERT INTO focus_session_history (date, sessions_completed, total_duration_seconds, created_at)
+                VALUES (@date, 1, @duration, @createdAt)
+                ON CONFLICT(date) DO UPDATE SET
+                    sessions_completed = sessions_completed + 1,
+                    total_duration_seconds = total_duration_seconds + @duration
+            ";
+            command.Parameters.AddWithValue("@date", date.ToString("yyyy-MM-dd"));
+            command.Parameters.AddWithValue("@duration", (int)durationSeconds);
+            command.Parameters.AddWithValue("@createdAt", DateTime.Now.ToString("o"));
+
+            command.ExecuteNonQuery();
+            Logger.Debug($"Recorded focus session for date: {date}, duration: {durationSeconds}s");
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to record focus session date: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Gets total focus time (in seconds) for a specific date.
+    /// </summary>
+    public double GetDailyFocusTime(DateOnly date)
+    {
+        EnsureInitialized();
+
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT total_duration_seconds FROM focus_session_history WHERE date = @date";
+            command.Parameters.AddWithValue("@date", date.ToString("yyyy-MM-dd"));
+
+            var result = command.ExecuteScalar();
+            if (result != null && result != DBNull.Value)
+            {
+                return Convert.ToDouble(result);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to get daily focus time: {ex.Message}");
+        }
+
+        return 0;
+    }
+
+    #endregion
+
+    #region Daily Goal Overrides
+
+    /// <summary>
+    /// Sets a custom goal for a specific date.
+    /// </summary>
+    public void SetDailyGoalOverride(DateOnly date, int goalMinutes)
+    {
+        EnsureInitialized();
+
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                INSERT INTO daily_goal_overrides (date, goal_minutes)
+                VALUES (@date, @goal)
+                ON CONFLICT(date) DO UPDATE SET goal_minutes = @goal
+            ";
+            command.Parameters.AddWithValue("@date", date.ToString("yyyy-MM-dd"));
+            command.Parameters.AddWithValue("@goal", goalMinutes);
+
+            command.ExecuteNonQuery();
+            Logger.Debug($"Set daily goal override: {date} = {goalMinutes} mins");
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to set daily goal override: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Gets the goal for a specific date, checking override first, then weekday/weekend defaults.
+    /// </summary>
+    public int GetDailyGoal(DateOnly date)
+    {
+        EnsureInitialized();
+
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            // 1. Check for date-specific override
+            using var overrideCmd = connection.CreateCommand();
+            overrideCmd.CommandText = "SELECT goal_minutes FROM daily_goal_overrides WHERE date = @date";
+            overrideCmd.Parameters.AddWithValue("@date", date.ToString("yyyy-MM-dd"));
+            var overrideResult = overrideCmd.ExecuteScalar();
+            if (overrideResult != null && overrideResult != DBNull.Value)
+            {
+                return Convert.ToInt32(overrideResult);
+            }
+
+            // 2. Check for weekday/weekend setting
+            bool isWeekend = date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday;
+            string settingKey = isWeekend ? "goal_weekend_minutes" : "goal_weekday_minutes";
+            
+            var setting = GetSetting(settingKey);
+            if (!string.IsNullOrEmpty(setting) && int.TryParse(setting, out var goalFromSetting))
+            {
+                return goalFromSetting;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to get daily goal: {ex.Message}");
+        }
+
+        // 3. Default: 120 minutes
+        return 120;
+    }
+
+    #endregion
+
+    /// <summary>
+    /// Gets dates with completed focus sessions in the last N days.
+    /// </summary>
+    public List<DateOnly> GetFocusSessionHistory(int days)
+    {
+        EnsureInitialized();
+        var result = new List<DateOnly>();
+
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            var startDate = DateOnly.FromDateTime(DateTime.Now.AddDays(-days));
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                SELECT date FROM focus_session_history
+                WHERE date >= @startDate
+                ORDER BY date DESC
+            ";
+            command.Parameters.AddWithValue("@startDate", startDate.ToString("yyyy-MM-dd"));
+
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                var dateStr = reader.GetString(0);
+                if (DateOnly.TryParse(dateStr, out var parsed))
+                {
+                    result.Add(parsed);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to get focus session history: {ex.Message}");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Gets focus history for a specific month, including duration and goal for each day.
+    /// Returns list of (date, focusSeconds, goalMinutes) tuples.
+    /// </summary>
+    public List<(DateOnly Date, double FocusSeconds, int GoalMinutes)> GetFocusHistoryForMonth(int year, int month)
+    {
+        EnsureInitialized();
+        var result = new List<(DateOnly Date, double FocusSeconds, int GoalMinutes)>();
+
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            var startDate = new DateOnly(year, month, 1);
+            var endDate = startDate.AddMonths(1).AddDays(-1);
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                SELECT date, total_duration_seconds FROM focus_session_history
+                WHERE date >= @startDate AND date <= @endDate
+                ORDER BY date ASC
+            ";
+            command.Parameters.AddWithValue("@startDate", startDate.ToString("yyyy-MM-dd"));
+            command.Parameters.AddWithValue("@endDate", endDate.ToString("yyyy-MM-dd"));
+
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                var dateStr = reader.GetString(0);
+                var focusSeconds = reader.GetDouble(1);
+                if (DateOnly.TryParse(dateStr, out var parsed))
+                {
+                    var goalMinutes = GetDailyGoal(parsed);
+                    result.Add((parsed, focusSeconds, goalMinutes));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to get focus history for month: {ex.Message}");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Gets total focus time (in seconds) for a specific month.
+    /// </summary>
+    public double GetMonthlyFocusTotal(int year, int month)
+    {
+        EnsureInitialized();
+
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            var startDate = new DateOnly(year, month, 1);
+            var endDate = startDate.AddMonths(1).AddDays(-1);
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                SELECT COALESCE(SUM(total_duration_seconds), 0) FROM focus_session_history
+                WHERE date >= @startDate AND date <= @endDate
+            ";
+            command.Parameters.AddWithValue("@startDate", startDate.ToString("yyyy-MM-dd"));
+            command.Parameters.AddWithValue("@endDate", endDate.ToString("yyyy-MM-dd"));
+
+            var result = command.ExecuteScalar();
+            return result != null && result != DBNull.Value ? Convert.ToDouble(result) : 0;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to get monthly focus total: {ex.Message}");
+            return 0;
         }
     }
 
